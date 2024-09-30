@@ -2,7 +2,6 @@ package com.iab.omid.sampleapp.util;
 
 import android.content.Context;
 import android.content.res.Resources;
-import android.webkit.WebView;
 import androidx.annotation.NonNull;
 import com.iab.omid.library.criteo.Omid;
 import com.iab.omid.library.criteo.adsession.AdSession;

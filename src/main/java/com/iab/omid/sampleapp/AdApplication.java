@@ -12,6 +12,5 @@ public class AdApplication extends Application {
 	@Override
 	public void onCreate() {
 		super.onCreate();
-		final WebView[] webView = {new WebView(this)};
 	}
 }
