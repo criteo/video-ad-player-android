@@ -54,6 +54,7 @@ public class VideoAdNativeActivity extends Activity implements Player.Listener, 
 
 	private static final String TAG = "CriteoVideoAd";
 
+	// link to vast, 10.0.2.2 in android emulator points to localhost of the pc
 	private static final String VAST_URL = "http://10.0.2.2:8000/vast.xml";
 
 	private static final int PLAYER_UNMUTE = 1;
@@ -95,6 +96,7 @@ public class VideoAdNativeActivity extends Activity implements Player.Listener, 
 		try {
 			adSession = AdSessionUtil.getNativeAdSession(this);
 		} catch (MalformedURLException e) {
+			// todo: drop verificationNotExecuted beacon
 			throw new UnsupportedOperationException(e);
 		}
 		mediaEvents = MediaEvents.createMediaEvents(adSession);
