@@ -29,9 +29,7 @@ android {
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         buildConfigField("String", "PARTNER_NAME", "\"com.iab.omid.sampleapp\"")
         buildConfigField("String", "VENDOR_KEY", "\"dummyVendor\"")
-        buildConfigField("String", "VALIDATION_SCRIPT_URL", "\"complianceomsdk.iabtechlab.com\"")
         // This override URL will only change URLs seen in Charles proxy for Html ads
-        buildConfigField("String", "VALIDATION_SCRIPT_URL_OVERRIDE", "\"complianceomsdk.iabtechlab.com\"")
         buildConfigField("String", "VERIFICATION_URL", "\"https://static.criteo.com/banners/js/omidjs/dev/omid-validation-verification-script-for-retail-media.js\"")
         buildConfigField("String", "VERIFICATION_PARAMETERS", "\"{\\\"beacons\\\":{\\\"omidTrackView\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/omidTrackView\\\",\\\"start\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/start\\\",\\\"firstQuartile\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/firstQuartile\\\",\\\"geometryChange\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/geometryChange\\\",\\\"sessionStart\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/sessionStart\\\",\\\"impression\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/impression\\\",\\\"midpoint\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/midpoint\\\",\\\"thirdQuartile\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/thirdQuartile\\\",\\\"complete\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/complete\\\",\\\"twoSecondsFiftyPercentView\\\":\\\"https://en0m1v0om6m97r.x.pipedream.net/beacons/omid/twoSecondsFiftyPercentView\\\"}}\"")
         multiDexEnabled true
