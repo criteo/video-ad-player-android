@@ -59,7 +59,7 @@ public class VideoAdNativeActivity extends Activity implements Player.Listener, 
 	private static final String TAG = "CriteoVideoAd";
 
 	// link to vast, 10.0.2.2 in android emulator points to localhost of the pc
-	private static final String VAST_URL = "http://10.0.2.2:8000/vast.xml";
+	private static final String VAST_URL = "https://rm-v.us5.us.criteo.com/v?rm_e=lSe1SIbnZeWUTy74E2i1Q4Ol52cZrIJl_A_P3hD1MdWr-Y8lR7z1yOjHAbSuYSjuO2HAhuyx1s3m6k6PURUmHOaokT2xjWqb8smSkeFkxcegd3--RPH8GvE0EE5YRvP4HH9x8t7bVxvrFq8k5RyPorKc_XyQy3tEzoIBCUxseKdmAbLxcN6wUDBsrqmGmUvyeBzSpaFfe4QWnIzUt8X-R-nao8fl9qUpz7_ZU1CAfw_yQ-nTk-KibXvRWrYIaCf76xztUrrqSfX3qa0njwveATt6o2HZjxMTNPvZLAoyl_Cj8t27wx00uiLSRFAEDD0JqWYaIGJ0ZHJVzUPS5chr1D492PMeTsQZ8JjeLQ_t1835jHuxhCcv7eDMNrxX4d8qAlY-a9jGRDXZ7Mfs69QBRUgQoAoU4ZZ64Pua8sXE36yt7akt2etN0pMCjiOfa1fLt9s1qaL3jnbie7CrFsxfXQLYrZrRefKZnjJLg2IXl85d89m9bH3QyQR03H5-EsGwwE6aFeX8sXzeIiPANx9OehdZ-pNUGbsmIjDKPd9_Ixtd2baAqUk122QCPNvEo8OavJK9N-wpt1W-m3tPZqF2AggIw1rqm5_iGv0BCBI2TkSAulQsUMsD_eTwzH8mRrQstn1QJ8d6FnUISUF27MwaBUzzaF4QAva6MFjdVnHNAmoJvlqyVkpNdC4RKmT3XtWlkOdFkq2xTlC9w6yDFuWwKdcJuOVwKnnZ8zxHO5YXWxL7DTT3R8KcoH51V_U2FkQBgYbmDsSoprbqAAEBIYl7mQ&ev=4";
 
 	private static final int PLAYER_UNMUTE = 1;
 	private static final int PLAYER_MUTE = 0;
@@ -113,13 +113,10 @@ public class VideoAdNativeActivity extends Activity implements Player.Listener, 
 			@Override
 			public void onSuccess(Document doc) {
 				// Process the document and update the UI
-				try {
-					doca = doc;
-					NodeList mediaFiles = (NodeList) xPathFactory.newXPath().compile("//MediaFile").evaluate(doc, XPathConstants.NODESET);
-					initializePlayer(mediaFiles.item(0).getTextContent());
-				} catch (XPathExpressionException e) {
-					throw new RuntimeException(e);
-				}
+				doca = doc;
+				String creativeUrl = extractByXpath("//MediaFile");
+				String ccUrl = extractByXpath("//ClosedCaptionFile");
+				initializePlayer(creativeUrl, ccUrl);
 			}
 
 			@Override
@@ -162,7 +159,12 @@ public class VideoAdNativeActivity extends Activity implements Player.Listener, 
 			if (nodes.getLength() > 1) {
 				Log.w(TAG, "Several nodes found with the provided xpath " + xpath + ". Choosing the first one");
 			}
-			return nodes.item(0).getTextContent();
+
+			// ugly, to refactor
+			if (!nodes.item(0).hasChildNodes())
+				return nodes.item(0).getTextContent();
+			else
+				return nodes.item(0).getFirstChild().getTextContent();
 		} catch (XPathExpressionException e) {
 			Log.e(TAG, "Couldn't extract the data from the given xpath" + xpath, e);
 			return null;
@@ -183,26 +185,32 @@ public class VideoAdNativeActivity extends Activity implements Player.Listener, 
 		}
 	}
 
-	private void initializePlayer(String videoUrl) {
+	private void initializePlayer(String videoUrl, String ccUrl) {
 		// Create an ExoPlayer and set it as the player for content and ads.
 		player = new ExoPlayer.Builder(this)
 				.build();
 
-		// Set your VTT subtitle URI
-		Uri subtitleUri = Uri.parse("http://10.0.2.2:8000/cerave.vtt");
-
-		// Prepare the subtitle configuration
-		MediaItem.SubtitleConfiguration subtitleConfig = new MediaItem.SubtitleConfiguration.Builder(subtitleUri)
-				.setMimeType(MimeTypes.TEXT_VTT) // The MIME type for WebVTT subtitles
-				.setLanguage("en") // Optional: Specify the language
-				.setSelectionFlags(C.SELECTION_FLAG_DEFAULT) // Optional: Set flags like default
-				.build();
 		// Create the MediaItem to play
-		MediaItem mediaItem =
+		MediaItem.Builder mediaItemBuilder =
 				new MediaItem.Builder()
-						.setUri(Uri.parse(videoUrl))
-						.setSubtitleConfigurations(Collections.singletonList(subtitleConfig))
-						.build();
+						.setUri(Uri.parse(videoUrl));
+
+		if (ccUrl != null) {
+			// Set your VTT subtitle URI
+			Uri subtitleUri = Uri.parse(ccUrl);
+
+			// Prepare the subtitle configuration
+			MediaItem.SubtitleConfiguration subtitleConfig = new MediaItem.SubtitleConfiguration.Builder(subtitleUri)
+					.setMimeType(MimeTypes.TEXT_VTT) // The MIME type for WebVTT subtitles
+					.setLanguage("en") // Optional: Specify the language
+					.setSelectionFlags(C.SELECTION_FLAG_DEFAULT) // Optional: Set flags like default
+					.build();
+
+			mediaItemBuilder.setSubtitleConfigurations(Collections.singletonList(subtitleConfig));
+		}
+
+		MediaItem mediaItem = mediaItemBuilder.build();
+
 		player.setMediaItem(mediaItem);
 		// Add listener on player events
 		player.addListener(this);
