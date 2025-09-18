@@ -1,16 +1,15 @@
-package com.iab.omid.sampleapp;
+package com.iab.omid.sampleapp
 
-import android.app.Application;
-import android.webkit.WebView;
+import android.app.Application
 
 /**
  * AdApplication - application subclass. Init Omid SDK, AdLoader, and debug libraries
  *
  */
+class AdApplication : Application() {
 
-public class AdApplication extends Application {
-	@Override
-	public void onCreate() {
-		super.onCreate();
-	}
+    override fun onCreate() {
+        super.onCreate()
+        // init Omid SDK, AdLoader, and debug libraries
+    }
 }
