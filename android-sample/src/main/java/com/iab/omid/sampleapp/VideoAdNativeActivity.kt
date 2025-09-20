@@ -28,7 +28,6 @@ import com.iab.omid.library.criteo.adsession.media.Position
 import com.iab.omid.library.criteo.adsession.media.VastProperties
 import com.iab.omid.sampleapp.util.AdSessionUtil
 import com.iab.omid.sampleapp.util.VastParser
-import com.iab.omid.sampleapp.util.VastParser.VASTFetchCallback
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -94,20 +93,19 @@ class VideoAdNativeActivity : Activity(), Player.Listener {
         adSession?.start()
 
         // Fetch and parse the VAST XML
-        vastParser.fetchAndParseVast(VAST_URL, object : VASTFetchCallback {
-            override fun onSuccess(doc: Document?) {
-                // Process the document and update the UI
+        vastParser.fetchAndParseVast(
+            vastUrl = VAST_URL,
+            onSuccess = { doc ->
                 document = doc
                 val creativeUrl = extractByXpath("//MediaFile")
                 val ccUrl = extractByXpath("//ClosedCaptionFile")
                 initializePlayer(creativeUrl, ccUrl)
-            }
-
-            override fun onFailure(e: Exception?) {
+            },
+            onFailure = { e ->
                 // Handle the error
-                Log.e("MainActivity", "Error fetching VAST XML", e)
+                Log.e(TAG, "Error fetching VAST XML", e)
             }
-        })
+        )
     }
 
     override fun onDestroy() {

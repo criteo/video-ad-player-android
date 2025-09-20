@@ -1,49 +1,30 @@
-package com.iab.omid.sampleapp.util;
+package com.iab.omid.sampleapp.util
 
-import android.os.Handler;
-import android.os.Looper;
+import android.os.Handler
+import android.os.Looper
+import org.w3c.dom.Document
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import javax.xml.parsers.DocumentBuilderFactory
 
-import org.w3c.dom.Document;
-import org.xml.sax.SAXException;
+class VastParser {
+    private val executorService: ExecutorService = Executors.newSingleThreadExecutor()
+    private val mainThreadHandler = Handler(Looper.getMainLooper())
 
-import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-
-public class VastParser {
-
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
-    private final Handler mainThreadHandler = new Handler(Looper.getMainLooper());
-
-    public interface VASTFetchCallback {
-        void onSuccess(Document doc);
-        void onFailure(Exception e);
+    fun fetchAndParseVast(
+        vastUrl: String,
+        onSuccess: (Document) -> Unit,
+        onFailure: (Throwable) -> Unit
+    ) {
+        executorService.submit {
+            runCatching { parseVastXml(vastUrl) }
+                .onSuccess { document -> mainThreadHandler.post { onSuccess(document) } }
+                .onFailure { error -> mainThreadHandler.post { onFailure(error) } }
+        }
     }
 
-    public void fetchAndParseVast(String vastUrl, VASTFetchCallback callback) {
-        executorService.submit(() -> {
-            Document doc;
-            try {
-                doc = parseVastXml(vastUrl);
-            } catch (Exception e) {
-                mainThreadHandler.post(() -> callback.onFailure(e));
-                return;
-            }
-            Document finalDoc = doc;
-            mainThreadHandler.post(() -> callback.onSuccess(finalDoc));
-        });
-    }
-
-    public static Document parseVastXml(String xmlData) throws ParserConfigurationException, IOException, SAXException {
-        DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-        DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
-        Document doc = dBuilder.parse(xmlData);
-        doc.getDocumentElement().normalize();
-
-        return doc;
-    }
+    private fun parseVastXml(xmlUrl: String): Document = DocumentBuilderFactory.newInstance()
+        .newDocumentBuilder()
+        .parse(xmlUrl)
+        .apply { documentElement.normalize() }
 }
