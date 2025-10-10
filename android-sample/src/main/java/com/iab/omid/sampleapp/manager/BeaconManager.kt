@@ -21,7 +21,9 @@ internal class BeaconManager(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 ) {
 
-    /** Fires a beacon to a specific URL with retry logic and proper error handling. */
+    /**
+     * Fires a beacon to a specific URL with retry logic and proper error handling.
+     */
     fun fireBeacon(url: URL, type: String) {
         scope.launch { fireBeaconWithRetry(url, type, attempt = 1) }
     }
