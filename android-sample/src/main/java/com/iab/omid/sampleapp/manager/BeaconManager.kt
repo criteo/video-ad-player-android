@@ -25,7 +25,7 @@ internal class BeaconManager(
      * Fires a beacon to a specific URL with retry logic and proper error handling.
      */
     fun fireBeacon(url: URL, type: String) {
-        scope.launch { fireBeaconWithRetry(url, type, attempt = 1) }
+        scope.launch { fireBeaconWithRetry(url, type, attempt = 0) }
     }
 
     /**
@@ -101,7 +101,7 @@ internal class BeaconManager(
      * Waits for exponential backoff delay then retries.
      */
     private suspend fun retryAfterDelay(url: URL, type: String, attempt: Int, maxAttempts: Int) {
-        val delayMs = (1L shl (attempt - 1)) * 1000L // 1s,2s,4s
+        val delayMs = Math.pow(2.0, attempt - 1.0).toLong() * 1000L // 1s,2s,4s
         Log.d(TAG, "Retrying $type beacon in ${delayMs / 1000.0}s...")
         delay(delayMs)
         fireBeaconWithRetry(url, type, attempt, maxAttempts)
