@@ -78,18 +78,23 @@ internal object CriteoLogger {
         enabledCategories.isEmpty() || category in enabledCategories
     }
 
-    // Core implementation
+    // Core implementation with JVM test fallback.
     private fun log(level: Level, message: String, category: Category) {
         if (level.priority < minimumLevel.priority) return
         if (!isCategoryEnabled(category)) return
 
         val tag = "com.omid.demo.${category.name.lowercase()}"
-        when (level) {
-            Level.DEBUG -> Log.d(tag, message)
-            Level.INFO -> Log.i(tag, message)
-            Level.WARNING -> Log.w(tag, message)
-            Level.ERROR -> Log.e(tag, message)
-            Level.CRITICAL -> Log.wtf(tag, message)
+        try {
+            when (level) {
+                Level.DEBUG -> Log.d(tag, message)
+                Level.INFO -> Log.i(tag, message)
+                Level.WARNING -> Log.w(tag, message)
+                Level.ERROR -> Log.e(tag, message)
+                Level.CRITICAL -> Log.wtf(tag, message)
+            }
+        } catch (e: RuntimeException) {
+            // Fallback for local JVM unit tests without Android log implementation.
+            println("[fallback-log][$tag][${level.name}] $message")
         }
     }
 }

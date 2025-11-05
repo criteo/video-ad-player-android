@@ -82,6 +82,9 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
 
     testImplementation 'junit:junit:4.12'
+    // Added for NetworkManager testing
+    testImplementation 'com.squareup.okhttp3:mockwebserver:5.1.0'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0'
     androidTestImplementation('androidx.test.espresso:espresso-core:3.1.0', {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
