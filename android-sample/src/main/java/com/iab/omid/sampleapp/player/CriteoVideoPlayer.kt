@@ -73,7 +73,9 @@ class CriteoVideoPlayer @JvmOverloads constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private val playerView: PlayerView = PlayerView(context)
+    private val playerView: PlayerView = PlayerView(context).apply {
+        layoutParams = LayoutParams(MATCH_PARENT, MATCH_PARENT)
+    }
 
     private var player: ExoPlayer? = null
     private var beaconManager: BeaconManager? = null
@@ -82,8 +84,6 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     private var progressJobStarted = false
 
     init {
-        playerView.layoutParams = LayoutParams(MATCH_PARENT, MATCH_PARENT)
-        playerView.useController = false
         addView(playerView)
     }
 
@@ -152,7 +152,10 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     // PUBLIC PLAYER API
     @OptIn(UnstableApi::class)
     fun load(videoUri: Uri, subtitleUri: Uri? = null) {
-        release() // Release the player and reset state in case it was already initialized
+        // Release the player and reset state if it was already initialized
+        if (player != null) {
+            release()
+        }
 
         // Create the MediaItem to play
         val mediaItem = MediaItem.Builder()
@@ -211,10 +214,6 @@ class CriteoVideoPlayer @JvmOverloads constructor(
         player?.removeListener(this)
         player?.release()
         player = null
-
-        beaconManager = null
-
-        vastAd = null
 
         progressJobStarted = false
 
