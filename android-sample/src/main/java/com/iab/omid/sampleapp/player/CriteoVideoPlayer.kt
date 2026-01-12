@@ -1,6 +1,7 @@
 package com.iab.omid.sampleapp.player
 
 import android.content.Context
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.net.Uri
@@ -14,6 +15,7 @@ import android.widget.ImageButton
 import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.annotation.OptIn
+import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.SubtitleConfiguration
@@ -395,12 +397,18 @@ class CriteoVideoPlayer @JvmOverloads constructor(
         // TODO fire OMID click event
 
         vastAd?.let { ad ->
-            // Fire click tracking beacons
-            beaconManager?.fireClickTrackingBeacons(ad = ad)
-
             if (ad.clickThroughUrl != null) {
-                // TODO open url in browser (use callback to activity/fragment)
+                // Fire click tracking beacons
+                beaconManager?.fireClickTrackingBeacons(ad = ad)
+
                 CriteoLogger.debug("Opening click-through URL: ${ad.clickThroughUrl}", Category.VIDEO)
+
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, ad.clickThroughUrl.toString().toUri())
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    CriteoLogger.warning("Failed to open click-through URL: ${e.localizedMessage}", Category.VIDEO)
+                }
             } else {
                 // No click-through URL available, use tap as pause/resume toggle
                 togglePlayPause(fromUserInteraction = true)
