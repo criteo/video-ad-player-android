@@ -81,7 +81,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     val durationMs: Long
         get() = player?.duration ?: 0L
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val quartileTrackingScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val playerView: PlayerView = PlayerView(context).apply {
         layoutParams = LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
@@ -159,7 +159,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     private var beaconManager: BeaconManager? = null
     private var vastAd: VastAd? = null
 
-    private var progressJobStarted = false
+    private var quartileTrackingStarted = false
     private var isClosedCaptionEnabled = false
 
     init {
@@ -178,19 +178,30 @@ class CriteoVideoPlayer @JvmOverloads constructor(
         super.onPlaybackStateChanged(playbackState)
 
         val p = player ?: return
+
+        // Start quartile tracking when ready (if not already started or complete)
+        if (playbackState == Player.STATE_READY && !quartileTrackingStarted && state.value.quartile != Quartile.COMPLETE) {
+            startQuartileTrackingLoop()
+        }
+
+        val newPlaybackState = when (playbackState) {
+            Player.STATE_READY -> if (p.isPlaying) PlaybackState.PLAYING else PlaybackState.PAUSED
+            Player.STATE_BUFFERING -> PlaybackState.LOADING
+            Player.STATE_ENDED -> PlaybackState.FINISHED
+            else -> PlaybackState.IDLE
+        }
+
+        val isComplete = playbackState == Player.STATE_ENDED && state.value.quartile != Quartile.COMPLETE
+
         _state.update { currentState ->
             currentState.copy(
-                playbackState = when (playbackState) {
-                    Player.STATE_READY -> {
-                        if (!progressJobStarted) startProgressLoop()
-                        if (p.isPlaying) PlaybackState.PLAYING else PlaybackState.PAUSED
-                    }
-                    Player.STATE_BUFFERING -> PlaybackState.LOADING
-                    Player.STATE_ENDED -> PlaybackState.FINISHED
-                    Player.STATE_IDLE -> PlaybackState.IDLE
-                    else -> PlaybackState.IDLE
-                }
+                playbackState = newPlaybackState,
+                quartile = if (isComplete) Quartile.COMPLETE else currentState.quartile
             )
+        }
+
+        if (isComplete) {
+            stopQuartileTrackingAndFireComplete()
         }
     }
 
@@ -209,6 +220,19 @@ class CriteoVideoPlayer @JvmOverloads constructor(
                     }
                 }
             )
+        }
+    }
+
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        super.onMediaItemTransition(mediaItem, reason)
+
+        // This reason only triggers when playback reaches the end and loops
+        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) {
+            // Only fire if we haven't already marked it as complete
+            if (state.value.quartile != Quartile.COMPLETE) {
+                _state.update { currentState -> currentState.copy(quartile = Quartile.COMPLETE) }
+                stopQuartileTrackingAndFireComplete()
+            }
         }
     }
 
@@ -305,9 +329,8 @@ class CriteoVideoPlayer @JvmOverloads constructor(
         player?.release()
         player = null
 
-        progressJobStarted = false
-
-        scope.cancel()
+        quartileTrackingStarted = false
+        quartileTrackingScope.cancel()
 
         _state.update { currentState ->
             currentState.copy(
@@ -369,9 +392,9 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     }
 
     // PRIVATE HELPERS
-    private fun startProgressLoop() {
-        progressJobStarted = true
-        scope.launch {
+    private fun startQuartileTrackingLoop() {
+        quartileTrackingStarted = true
+        quartileTrackingScope.launch {
             while (isActive) {
                 val duration = player?.duration ?: 0L
                 val currentPosition = player?.currentPosition
@@ -390,6 +413,12 @@ class CriteoVideoPlayer @JvmOverloads constructor(
                 delay(PROGRESS_INTERVAL_MS)
             }
         }
+    }
+
+    private fun stopQuartileTrackingAndFireComplete() {
+        quartileTrackingScope.cancel()
+        quartileTrackingStarted = false
+        fireQuartileEvent(Quartile.COMPLETE)
     }
 
     /// Handle video click - fires OMID/beacon events and either opens URL or toggles play/pause
