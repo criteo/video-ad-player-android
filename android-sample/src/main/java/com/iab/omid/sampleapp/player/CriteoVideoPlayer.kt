@@ -307,7 +307,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
 
                 exoPlayer.addListener(this)
                 exoPlayer.setMediaItem(mediaItem)
-                exoPlayer.volume = PLAYER_UNMUTE
+                exoPlayer.volume = PLAYER_MUTE
                 exoPlayer.repeatMode = Player.REPEAT_MODE_ONE
                 exoPlayer.playWhenReady = true
                 exoPlayer.prepare()
