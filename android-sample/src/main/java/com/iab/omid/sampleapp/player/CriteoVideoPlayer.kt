@@ -12,6 +12,7 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.annotation.OptIn
@@ -87,6 +88,12 @@ class CriteoVideoPlayer @JvmOverloads constructor(
         layoutParams = LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
     }
 
+    private val minButtonSizePx = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP,
+        32f,
+        context.resources.displayMetrics
+    ).toInt()
+
     private val closedCaptionButton = Button(context).apply {
         text = "CC"
         setTextColor(closedCaptionButtonTextColor)
@@ -95,15 +102,10 @@ class CriteoVideoPlayer @JvmOverloads constructor(
         setBackgroundColor(Color.LTGRAY)
 
         layoutParams = LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
-            val minSizePx = TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                32f,
-                context.resources.displayMetrics
-            ).toInt()
-            minHeight = minSizePx
-            minimumHeight = minSizePx
-            minWidth = minSizePx
-            minimumWidth = minSizePx
+            minHeight = minButtonSizePx
+            minimumHeight = minButtonSizePx
+            minWidth = minButtonSizePx
+            minimumWidth = minButtonSizePx
 
             val padding = TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP,
@@ -122,22 +124,9 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     private val closedCaptionButtonTextColor: Int @ColorInt
         get() = if (isClosedCaptionEnabled) Color.WHITE else Color.DKGRAY
 
-    private val muteButton = ImageButton(context).apply {
-        setImageResource(muteButtonIconDrawableRes)
-        imageTintList = ColorStateList.valueOf(closedCaptionButtonTextColor)
-        setBackgroundColor(Color.LTGRAY)
-
+    private val controlsContainer = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
         layoutParams = LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
-            val minSizePx = TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                32f,
-                context.resources.displayMetrics
-            ).toInt()
-            height = minSizePx
-            minimumHeight = minSizePx
-            width = minSizePx
-            minimumWidth = minSizePx
-
             val padding = TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_DIP,
                 12f,
@@ -145,8 +134,44 @@ class CriteoVideoPlayer @JvmOverloads constructor(
             ).toInt()
             bottomMargin = padding
             marginStart = padding
-
             gravity = Gravity.BOTTOM or Gravity.START
+        }
+    }
+
+    private val playPauseButton = ImageButton(context).apply {
+        setImageResource(playPauseButtonIconDrawableRes)
+        imageTintList = ColorStateList.valueOf(Color.DKGRAY)
+        setBackgroundColor(Color.LTGRAY)
+
+        layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+            height = minButtonSizePx
+            minimumHeight = minButtonSizePx
+            width = minButtonSizePx
+            minimumWidth = minButtonSizePx
+        }
+
+        setOnClickListener { togglePlayPause(fromUserInteraction = true) }
+    }
+
+    private val playPauseButtonIconDrawableRes: Int @DrawableRes
+        get() = if (state.value.playbackState == PlaybackState.PLAYING) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+
+    private val muteButton = ImageButton(context).apply {
+        setImageResource(muteButtonIconDrawableRes)
+        imageTintList = ColorStateList.valueOf(Color.DKGRAY)
+        setBackgroundColor(Color.LTGRAY)
+
+        layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+            height = minButtonSizePx
+            minimumHeight = minButtonSizePx
+            width = minButtonSizePx
+            minimumWidth = minButtonSizePx
+
+            marginStart = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                12f,
+                context.resources.displayMetrics
+            ).toInt()
         }
 
         setOnClickListener { toggleMute() }
@@ -165,7 +190,10 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     init {
         addView(playerView)
         addView(closedCaptionButton)
-        addView(muteButton)
+        addView(controlsContainer)
+
+        controlsContainer.addView(playPauseButton)
+        controlsContainer.addView(muteButton)
     }
 
     override fun onDetachedFromWindow() {
@@ -192,6 +220,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
                 }
             )
         }
+        playPauseButton.setImageResource(playPauseButtonIconDrawableRes)
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -210,6 +239,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
                 }
             )
         }
+        playPauseButton.setImageResource(playPauseButtonIconDrawableRes)
     }
 
     override fun onVolumeChanged(volume: Float) {
