@@ -1,7 +1,6 @@
 package com.iab.omid.sampleapp
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
 import androidx.fragment.app.Fragment
@@ -41,9 +40,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun showFeedVideoPlayerScreen() {
-        // TODO remove toast and uncomment navigateToFragment call when FeedVideoPlayerFragment is implemented
-        Toast.makeText(this, "Feed Example coming soon.", Toast.LENGTH_SHORT).show()
-//        navigateToFragment(FeedVideoPlayerFragment())
+        navigateToFragment(FeedVideoPlayerFragment())
     }
 
     private fun navigateToFragment(fragment: Fragment) {
@@ -51,5 +48,9 @@ class MainActivity : AppCompatActivity() {
             .replace(R.id.mainFragmentContainer, fragment)
             .addToBackStack(null)
             .commit()
+    }
+
+    companion object {
+        const val VAST_DEMO_URL = "https://raw.githubusercontent.com/criteo/interview-ios/refs/heads/main/server/sample_vast_app.xml"
     }
 }
