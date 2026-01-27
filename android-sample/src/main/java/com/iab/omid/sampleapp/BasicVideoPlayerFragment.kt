@@ -37,7 +37,7 @@ class BasicVideoPlayerFragment : Fragment() {
         // 1. Configure the video ad wrapper
         val config = CriteoVideoAdConfiguration(
             autoLoad = true,
-            startsMuted = false
+            startsMuted = true
         )
 
         // 2. Create the wrapper using the factory method

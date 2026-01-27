@@ -155,7 +155,11 @@ class FeedVideoPlayerFragment : Fragment() {
         private val items: List<FeedItem> = listOf(
             FeedItem.Content(
                 title = "Welcome to the Feed",
-                body = "This is a demo of a social media-style feed with an embedded video ad. Scroll down to see the video ad appear inline with other content."
+                body = "This is a demo of a social media-style feed with an embedded video ad."
+            ),
+            FeedItem.Content(
+                title ="Sample Content",
+                body = "This feed contains sample content items to simulate a real-world social media feed experience."
             ),
             FeedItem.Content(
                 title = "Scroll Down to See Video Ad",
@@ -166,12 +170,20 @@ class FeedVideoPlayerFragment : Fragment() {
                 body = "The video player supports VAST (Video Ad Serving Template) for standardized video ad delivery."
             ),
             FeedItem.Content(
+                title = "What is VAST",
+                body = "VAST is an XML-based standard developed for serving video ads across different platforms and players."
+            ),
+            FeedItem.Content(
                 title = "How It Works",
                 body = "The video ad below will automatically play when at least 50% of it is visible on screen, and pause when less than 50% is visible."
             ),
             FeedItem.Content(
                 title = "Beacon Tracking",
-                body = "Impression, quartile, and completion beacons are automatically fired as the user watches the video. Other VAST tracking events like clicks and pause/play are also supported."
+                body = "Impression, quartile, and completion beacons are automatically fired as the user watches the video the first time through. Other VAST tracking events like clicks and pause/play are also supported."
+            ),
+            FeedItem.Content(
+                title = "All beacons should be fired only once",
+                body = "Except for the interaction beacons that should be fired every time the user interacts with these actions (click, mute, unmute, resume, pause)."
             ),
             FeedItem.Content(
                 title = "OMID Integration",
@@ -199,8 +211,20 @@ class FeedVideoPlayerFragment : Fragment() {
                 body = "Logging is available for video playback events and OMID interactions to aid in debugging and monitoring."
             ),
             FeedItem.Content(
-                title = "Thank You",
-                body = "Thank you for trying out this feed video ad example! We hope it demonstrates the capabilities of our video ad player."
+                title = "Video Ad Integration",
+                body = "Integrating video ads into a feed enhances user engagement and provides monetization opportunities within content streams."
+            ),
+            FeedItem.Content(
+                title = "Thank You for Watching",
+                body = "We appreciate you taking the time to explore this feed video ad example."
+            ),
+            FeedItem.Content(
+                title = "Demo Purpose",
+                body = "We hope it demonstrates some of the capabilities of our video ad player."
+            ),
+            FeedItem.Content(
+                title = "Demo Code",
+                body = "This demo app's source code is available for reference and further exploration."
             )
         )
 
@@ -296,8 +320,8 @@ class FeedVideoPlayerFragment : Fragment() {
 
                 // Create new video wrapper
                 val config = CriteoVideoAdConfiguration(
-                    autoLoad = true,
-                    startsMuted = true // Muted autoplay for feed context
+                    autoLoad = false, // Handle auto-play based on visibility in feeds
+                    startsMuted = true
                 )
 
                 videoAdWrapper = CriteoVideoAdWrapper.fromUrl(

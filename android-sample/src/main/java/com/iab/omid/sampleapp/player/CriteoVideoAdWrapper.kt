@@ -468,10 +468,8 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
             currentState = CriteoVideoAdState.Ready
             onVideoLoaded?.invoke()
 
-            // Auto-setup player if ready
-            if (configuration.autoLoad) {
-                setupVideoPlayer()
-            }
+            // Setup player after assets are ready
+            setupVideoPlayer()
         } catch (error: Throwable) {
             wrapperLog("Asset download failed: $error", Category.NETWORK)
             currentState = CriteoVideoAdState.Error(error)
@@ -540,12 +538,12 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
         // Load video
         val videoUri = Uri.fromFile(videoFile)
         val subtitleUri = closedCaptionsAssetFile?.let { Uri.fromFile(it) }
-        player.load(videoUri, subtitleUri)
-
-        // Set mute state after loading
-        if (configuration.startsMuted != player.state.value.isMuted) {
-            player.toggleMute()
-        }
+        player.load(
+            videoUri = videoUri,
+            subtitleUri = subtitleUri,
+            playWhenReady = configuration.autoLoad && !isUserPaused,
+            startsMuted = configuration.startsMuted
+        )
 
         // Handle click for click-through URL
         player.setOnClickListener {
@@ -556,11 +554,6 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
         // Seek to saved position if any
         if (lastPlaybackPosition > 0) {
             player.seekTo(lastPlaybackPosition)
-        }
-
-        // Auto-play if not user-paused
-        if (!isUserPaused) {
-            player.play(fromUserInteraction = false)
         }
 
         videoPlayer = player
@@ -690,7 +683,7 @@ enum class CriteoVideoAdLogCategory {
  */
 data class CriteoVideoAdConfiguration(
     val autoLoad: Boolean = true,
-    val startsMuted: Boolean = false,
+    val startsMuted: Boolean = true,
     val backgroundColor: Int = Color.WHITE,
     val loadingBackgroundColor: Int = "#F2F2F7".toColorInt(),
     val loadingIndicatorColor: Int = "#AEAEB2".toColorInt(),
