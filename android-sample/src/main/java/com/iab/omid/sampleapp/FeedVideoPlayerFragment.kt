@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.FrameLayout.LayoutParams
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.Fragment
@@ -34,9 +35,7 @@ class FeedVideoPlayerFragment : Fragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_feed_video_player, container, false)
-    }
+    ): View? = inflater.inflate(R.layout.fragment_feed_video_player, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -47,9 +46,9 @@ class FeedVideoPlayerFragment : Fragment() {
     }
 
     private fun setupRecyclerView(view: View) {
-        recyclerView = view.findViewById(R.id.feedRecyclerView)
         adapter = FeedAdapter()
 
+        recyclerView = view.findViewById(R.id.feedRecyclerView)
         recyclerView?.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = this@FeedVideoPlayerFragment.adapter
@@ -78,10 +77,17 @@ class FeedVideoPlayerFragment : Fragment() {
      * Checks visibility of the video ad item and plays/pauses based on 50% visibility threshold.
      */
     private fun checkVideoVisibility() {
-        val videoAdViewHolder = adapter?.getVideoAdViewHolder() ?: return
+        val layoutManager = recyclerView?.layoutManager as? LinearLayoutManager ?: return
+        val firstVisible = layoutManager.findFirstVisibleItemPosition()
+        val lastVisible = layoutManager.findLastVisibleItemPosition()
 
-        val visibilityPercentage = calculateVisibilityPercentage(videoAdViewHolder.itemView)
-        videoAdViewHolder.onVisibilityChanged(visibilityPercentage >= 50)
+        for (i in firstVisible..lastVisible) {
+            val viewHolder = recyclerView?.findViewHolderForAdapterPosition(i) ?: continue
+            if (viewHolder is FeedAdapter.VideoAdViewHolder) {
+                val visibilityPercentage = calculateVisibilityPercentage(viewHolder.itemView)
+                viewHolder.onVisibilityChanged(visibilityPercentage >= 50)
+            }
+        }
     }
 
     /**
@@ -102,16 +108,11 @@ class FeedVideoPlayerFragment : Fragment() {
         val visibleHeight = minOf(viewBounds.bottom, recyclerBounds.bottom) -
                 maxOf(viewBounds.top, recyclerBounds.top)
 
-        return if (visibleHeight > 0) {
-            (visibleHeight * 100) / view.height
-        } else {
-            0
-        }
+        return if (visibleHeight > 0) (visibleHeight * 100) / view.height else 0
     }
 
     override fun onPause() {
         super.onPause()
-        // Pause all videos when fragment is paused
         adapter?.pauseAllVideos()
     }
 
@@ -124,33 +125,27 @@ class FeedVideoPlayerFragment : Fragment() {
 
     companion object {
         private const val TAG = "FeedVideoPlayerFragment"
-
-        fun newInstance(): FeedVideoPlayerFragment {
-            return FeedVideoPlayerFragment()
-        }
     }
 
     /**
      * Sealed class representing different types of feed items.
      */
     private sealed class FeedItem {
-        data class Content(
-            val title: String,
-            val body: String
-        ) : FeedItem()
-
-        data class VideoAd(
-            val vastUrl: String
-        ) : FeedItem()
+        data class Content(val title: String, val body: String) : FeedItem()
+        data class VideoAd(val vastUrl: String) : FeedItem()
     }
 
     /**
-     * RecyclerView adapter for feed items with embedded video ads.
+     * Example RecyclerView adapter for feed items with embedded video ads.
      */
     private inner class FeedAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
         private val VIEW_TYPE_CONTENT = 0
         private val VIEW_TYPE_VIDEO_AD = 1
+
+        // Cache video players by URL to persist state across ViewHolder recycling
+        private val videoAdWrappers = mutableMapOf<String, CriteoVideoAdWrapper>()
+        private val videoAdViewHolders = mutableSetOf<VideoAdViewHolder>()
 
         private val items: List<FeedItem> = listOf(
             FeedItem.Content(
@@ -228,66 +223,53 @@ class FeedVideoPlayerFragment : Fragment() {
             )
         )
 
-        private var videoAdViewHolder: VideoAdViewHolder? = null
-
-        override fun getItemViewType(position: Int): Int {
-            return when (items[position]) {
-                is FeedItem.Content -> VIEW_TYPE_CONTENT
-                is FeedItem.VideoAd -> VIEW_TYPE_VIDEO_AD
-            }
+        override fun getItemViewType(position: Int): Int = when (items[position]) {
+            is FeedItem.Content -> VIEW_TYPE_CONTENT
+            is FeedItem.VideoAd -> VIEW_TYPE_VIDEO_AD
         }
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-            return when (viewType) {
-                VIEW_TYPE_VIDEO_AD -> {
-                    val view = LayoutInflater.from(parent.context)
-                        .inflate(R.layout.item_feed_video, parent, false)
-                    VideoAdViewHolder(view)
-                }
-                else -> {
-                    val view = LayoutInflater.from(parent.context)
-                        .inflate(R.layout.item_feed_content, parent, false)
-                    ContentViewHolder(view)
-                }
+        override fun onCreateViewHolder(
+            parent: ViewGroup,
+            viewType: Int
+        ): RecyclerView.ViewHolder = when (viewType) {
+            VIEW_TYPE_VIDEO_AD -> {
+                val view = LayoutInflater.from(parent.context).inflate(R.layout.item_feed_video, parent, false)
+                VideoAdViewHolder(view).also { videoAdViewHolders.add(it) }
+            }
+            else -> {
+                val view = LayoutInflater.from(parent.context).inflate(R.layout.item_feed_content, parent, false)
+                ContentViewHolder(view)
             }
         }
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
             when (val item = items[position]) {
                 is FeedItem.Content -> (holder as ContentViewHolder).bind(item)
-                is FeedItem.VideoAd -> {
-                    (holder as VideoAdViewHolder).bind(item)
-                    videoAdViewHolder = holder
-                }
+                is FeedItem.VideoAd -> (holder as VideoAdViewHolder).bind(item)
             }
         }
 
         override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
             super.onViewRecycled(holder)
             if (holder is VideoAdViewHolder) {
-                // Don't cleanup - we want to preserve the video state
-                // Just pause the video when recycled
+                // Don't cleanup, just pause - we want to preserve the video state when recycled
                 holder.pause()
-                videoAdViewHolder = null
             }
         }
 
         override fun getItemCount(): Int = items.size
 
         fun pauseAllVideos() {
-            videoAdViewHolder?.pause()
+            videoAdWrappers.values.forEach { it.pause() }
         }
 
         fun cleanupVideos() {
-            videoAdViewHolder?.cleanup()
-            videoAdViewHolder = null
+            videoAdWrappers.values.forEach { it.release() }
+            videoAdWrappers.clear()
+            videoAdViewHolders.forEach { it.cleanup() }
+            videoAdViewHolders.clear()
         }
 
-        fun getVideoAdViewHolder(): VideoAdViewHolder? = videoAdViewHolder
-
-        /**
-         * ViewHolder for regular content items.
-         */
         inner class ContentViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val titleText: TextView = itemView.findViewById(R.id.contentTitle)
             private val bodyText: TextView = itemView.findViewById(R.id.contentBody)
@@ -298,9 +280,6 @@ class FeedVideoPlayerFragment : Fragment() {
             }
         }
 
-        /**
-         * ViewHolder for video ad items.
-         */
         inner class VideoAdViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
             private val videoContainer: FrameLayout = itemView.findViewById(R.id.videoAdContainer)
 
@@ -309,79 +288,65 @@ class FeedVideoPlayerFragment : Fragment() {
             private var currentVastUrl: String? = null
 
             fun bind(item: FeedItem.VideoAd) {
-                // Only create a new wrapper if the VAST URL changed or wrapper doesn't exist
-                if (videoAdWrapper != null && currentVastUrl == item.vastUrl) {
-                    return
+                val newUrl = item.vastUrl
+
+                // If binding to a different URL than what this holder last held, reset state
+                if (currentVastUrl != null && currentVastUrl != newUrl) {
+                    videoContainer.removeAllViews()
+                    videoAdWrapper = null
+                    isVideoVisible = false
                 }
+                currentVastUrl = newUrl
 
-                // Clean up previous video if switching to a different ad
-                cleanup()
-                currentVastUrl = item.vastUrl
+                // Check if we already have a player for this URL in the adapter cache
+                var player = videoAdWrappers[newUrl]
+                if (player == null) {
+                    Log.d(TAG, "Creating new player for $newUrl")
 
-                // Create new video wrapper
-                val config = CriteoVideoAdConfiguration(
-                    autoLoad = false, // Handle auto-play based on visibility in feeds
-                    startsMuted = true
-                )
-
-                videoAdWrapper = CriteoVideoAdWrapper.fromUrl(
-                    context = itemView.context,
-                    vastURL = item.vastUrl,
-                    configuration = config
-                )
-
-                // Set 16:9 aspect ratio based on container width
-                videoContainer.post {
-                    val width = videoContainer.width
-                    val height = (width * 9.0) / 16.0
-                    videoAdWrapper?.layoutParams = FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        height.toInt()
+                    player = CriteoVideoAdWrapper.fromUrl(
+                        context = itemView.context,
+                        vastURL = newUrl,
+                        configuration = CriteoVideoAdConfiguration(autoLoad = false, startsMuted = true)
                     )
+
+                    // Configure listeners
+                    player.enableLogs = setOf(CriteoVideoAdLogCategory.VIDEO, CriteoVideoAdLogCategory.OMID)
+                    player.onVideoLoaded = { Log.d(TAG, "Video ad loaded") }
+                    player.onVideoStarted = { Log.d(TAG, "▶️ Video ad started") }
+                    player.onVideoPaused = { Log.d(TAG, "⏸️ Video ad paused") }
+
+                    videoAdWrappers[newUrl] = player
+                } else {
+                    Log.d(TAG, "Reusing existing player for $newUrl")
                 }
 
-                // Enable logging for debugging
-                videoAdWrapper?.enableLogs = setOf(
-                    CriteoVideoAdLogCategory.VIDEO,
-                    CriteoVideoAdLogCategory.OMID
-                )
+                videoAdWrapper = player
 
-                videoAdWrapper?.onVideoLoaded = {
-                    Log.d(TAG, "Video ad loaded")
-                    // Check visibility after video is loaded
-                    if (isVideoVisible) {
-                        videoAdWrapper?.play()
+                // Set layout params
+                videoContainer.post {
+                    videoAdWrapper?.let {
+                        val height = (videoContainer.width * 9.0) / 16.0
+                        it.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, height.toInt())
                     }
                 }
 
-                videoAdWrapper?.onVideoStarted = {
-                    Log.d(TAG, "▶️ Video ad started")
+                // Attach to view hierarchy if not already attached to THIS container
+                val parent = player.parent
+                if (parent != videoContainer) {
+                    if (parent is ViewGroup) {
+                        parent.removeView(player)
+                    }
+                    videoContainer.addView(player)
                 }
-
-                videoAdWrapper?.onVideoPaused = {
-                    Log.d(TAG, "⏸️ Video ad paused")
-                }
-
-                videoContainer.addView(videoAdWrapper)
             }
 
-            /**
-             * Called when visibility state changes based on scroll position.
-             *
-             * @param isVisible True if at least 50% of the video is visible.
-             */
             fun onVisibilityChanged(isVisible: Boolean) {
                 if (isVideoVisible == isVisible) return
 
                 isVideoVisible = isVisible
 
-                if (isVisible) {
-                    videoAdWrapper?.play()
-                    Log.d(TAG, "▶️ Auto-play triggered")
-                } else {
-                    videoAdWrapper?.pause()
-                    Log.d(TAG, "⏸️ Auto-pause triggered")
-                }
+                if (isVisible) videoAdWrapper?.play() else videoAdWrapper?.pause()
+                Log.d(TAG, "Auto ${if (isVisible) "play" else "pause"} triggered")
             }
 
             fun pause() {
@@ -397,4 +362,3 @@ class FeedVideoPlayerFragment : Fragment() {
         }
     }
 }
-

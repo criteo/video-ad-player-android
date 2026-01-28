@@ -48,7 +48,8 @@ import kotlinx.coroutines.isActive
  * - Closed captions support (VTT/WebVTT)
  * - Smart media file selection based on aspect ratio
  * - Click-through URL handling
- * - Automatic cleanup on detachment
+ * - Automatic pause on view detachment (RecyclerView friendly)
+ * - Manual release() for full resource cleanup
  *
  * FEATURES:
  * - Multiple initialization methods: constructor, fromUrl(), fromXml()
@@ -82,6 +83,7 @@ import kotlinx.coroutines.isActive
  *   - seekTo(timeMs: Long) - Seek to position
  *   - toggleMute() - Toggle mute state
  *   - retry() - Retry loading after error
+ *   - release() - Release all resources (call when done with the wrapper)
  *
  * USAGE EXAMPLES:
  *
@@ -310,9 +312,8 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
     // LIFECYCLE METHODS
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        preloadJob?.cancel()
-        videoPlayer?.release()
-        scope.cancel()
+        // Only pause on detach, parent responsible for calling release() when truly done
+        videoPlayer?.pause(fromUserInteraction = false)
     }
 
     // PUBLIC API
@@ -361,6 +362,31 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
         wrapperLog("Retry button tapped", Category.UI)
         currentState = CriteoVideoAdState.NotLoaded
         loadVideoAd(source)
+    }
+
+    /**
+     * Release all resources held by this wrapper.
+     *
+     * Call this method when you are completely done with the video ad wrapper
+     * (e.g., in Fragment's onDestroyView or Activity's onDestroy).
+     *
+     * After calling release(), the wrapper cannot be reused. Create a new instance
+     * if you need to load another video ad.
+     *
+     * Note: This is NOT called automatically on view detachment to support
+     * RecyclerView scenarios where views are frequently recycled.
+     */
+    fun release() {
+        wrapperLog("Releasing video ad wrapper", Category.VIDEO)
+        preloadJob?.cancel()
+        preloadJob = null
+        videoPlayer?.release()
+        videoPlayer = null
+        scope.cancel()
+        vastAd = null
+        videoAssetFile = null
+        closedCaptionsAssetFile = null
+        currentState = CriteoVideoAdState.NotLoaded
     }
 
     // PRIVATE HELPERS

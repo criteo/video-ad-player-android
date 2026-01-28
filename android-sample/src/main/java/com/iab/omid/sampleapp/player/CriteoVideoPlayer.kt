@@ -198,7 +198,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        release()
+        pause(fromUserInteraction = false)
     }
 
     // PLAYER LISTENER CALLBACKS

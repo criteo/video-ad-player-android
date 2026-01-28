@@ -89,6 +89,7 @@ class BasicVideoPlayerFragment : Fragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        videoAdWrapper?.release()
         videoAdWrapper = null
     }
 
