@@ -64,23 +64,23 @@ class BasicVideoPlayerFragment : Fragment() {
 
         // 4. Set up optional callbacks
         videoAdWrapper?.onVideoLoaded = {
-            Log.d(TAG, "✅ Video loaded successfully and ready to play")
+            Log.d(TAG, "Video loaded successfully and ready to play")
         }
 
         videoAdWrapper?.onVideoStarted = {
-            Log.d(TAG, "▶️ Video playback started")
+            Log.d(TAG, "Video playback started")
         }
 
         videoAdWrapper?.onVideoPaused = {
-            Log.d(TAG, "⏸️ Video playback paused")
+            Log.d(TAG, "Video playback paused")
         }
 
         videoAdWrapper?.onVideoTapped = {
-            Log.d(TAG, "👆 User tapped on video")
+            Log.d(TAG, "User tapped on video")
         }
 
         videoAdWrapper?.onVideoError = { error ->
-            Log.e(TAG, "❌ Video error: ${error.message}", error)
+            Log.e(TAG, "Video error: ${error.message}", error)
         }
 
         // 5. Add the wrapper to the layout

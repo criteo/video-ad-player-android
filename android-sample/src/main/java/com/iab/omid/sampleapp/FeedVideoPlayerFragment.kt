@@ -312,8 +312,8 @@ class FeedVideoPlayerFragment : Fragment() {
                     // Configure listeners
                     player.enableLogs = setOf(CriteoVideoAdLogCategory.VIDEO, CriteoVideoAdLogCategory.OMID)
                     player.onVideoLoaded = { Log.d(TAG, "Video ad loaded") }
-                    player.onVideoStarted = { Log.d(TAG, "▶️ Video ad started") }
-                    player.onVideoPaused = { Log.d(TAG, "⏸️ Video ad paused") }
+                    player.onVideoStarted = { Log.d(TAG, "Video ad started") }
+                    player.onVideoPaused = { Log.d(TAG, "Video ad paused") }
 
                     videoAdWrappers[newUrl] = player
                 } else {
