@@ -75,6 +75,10 @@ class OMIDSessionInteractorStub : IOMIDSessionInteractor {
         log("fireSkipped")
     }
 
+    override fun fireClickInteraction() {
+        log("fireClick")
+    }
+
     override fun addMediaControlsObstruction(element: View) {
         log("addMediaControlsObstruction: ${element.javaClass.simpleName}")
     }

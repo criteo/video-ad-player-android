@@ -15,8 +15,6 @@ import com.iab.omid.library.criteo.adsession.Partner
 import com.iab.omid.library.criteo.adsession.VerificationScriptResource
 import com.iab.omid.library.criteo.adsession.media.InteractionType
 import com.iab.omid.library.criteo.adsession.media.MediaEvents
-import com.iab.omid.library.criteo.adsession.media.PlayerState
-import com.iab.omid.library.criteo.adsession.media.VastProperties
 import com.iab.omid.sampleapp.BuildConfig
 import com.iab.omid.sampleapp.util.AdSessionUtil
 import com.iab.omid.sampleapp.util.CriteoLogger
@@ -47,309 +45,24 @@ class OMIDSessionInteractor(
 ) : IOMIDSessionInteractor {
 
     private var adSession: AdSession? = null
+
     private var adEvents: AdEvents? = null
+        get() {
+            if (field == null) {
+                CriteoLogger.warning("AdEvents not instantiated, session may not be started", Category.OMID)
+            }
+            return field
+        }
+
     private var mediaEvents: MediaEvents? = null
+        get() {
+            if (field == null) {
+                CriteoLogger.warning("MediaEvents not instantiated, session may not be started", Category.OMID)
+            }
+            return field
+        }
 
     init {
-        createAdSession()
-    }
-
-    // MARK: - Session Lifecycle
-
-    /**
-     * Starts the OMID session. Must be called before firing any events.
-     * Creates ad events and media events publishers.
-     */
-    override fun startSession() {
-        val session = adSession ?: run {
-            CriteoLogger.error("Cannot start session: AdSession is null", Category.OMID)
-            return
-        }
-
-        CriteoLogger.info("Starting OMID session", Category.OMID)
-
-        createAdEventsPublisher()
-        createMediaEventsPublisher()
-
-        session.start()
-    }
-
-    /**
-     * Stops the OMID session. Call when ad playback completes or is terminated.
-     */
-    override fun stopSession() {
-        CriteoLogger.info("Stopping OMID session", Category.OMID)
-
-        adSession?.finish()
-        adSession = null
-        adEvents = null
-        mediaEvents = null
-    }
-
-    // MARK: - Ad Events
-
-    /**
-     * Fires the ad loaded event with default VAST properties for non-skippable media.
-     */
-    override fun fireAdLoaded() {
-        CriteoLogger.info("Firing OMID ad loaded", Category.OMID)
-        try {
-            getAdEventsPublisher()?.loaded()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID load error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the ad loaded event with custom VAST properties.
-     *
-     * @param vastProperties Custom VAST properties for the ad
-     */
-    fun fireAdLoaded(vastProperties: VastProperties) {
-        CriteoLogger.info("Firing OMID ad loaded with custom VAST properties", Category.OMID)
-        try {
-            getAdEventsPublisher()?.loaded(vastProperties)
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID load error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the impression event. Should be called when the first frame of video plays.
-     */
-    override fun fireImpression() {
-        CriteoLogger.info("Firing OMID impression", Category.OMID)
-        try {
-            getAdEventsPublisher()?.impressionOccurred()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID impression error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    // MARK: - Media Events
-
-    /**
-     * Fires the start event. Should be called when video playback begins.
-     *
-     * @param durationMs Duration of the ad in milliseconds
-     * @param volume Current player volume (0.0 to 1.0)
-     */
-    override fun fireStart(durationMs: Long, volume: Float) {
-        CriteoLogger.info("Firing OMID start (duration=${durationMs}ms, volume=$volume)", Category.OMID)
-        try {
-            // OMID expects duration in seconds as Float
-            val durationSeconds = durationMs / 1000f
-            getMediaEventsPublisher()?.start(durationSeconds, volume)
-        } catch (e: Exception) {
-            CriteoLogger.error(
-                "OMID start error: ${e.localizedMessage}",
-                Category.OMID
-            )
-        }
-    }
-
-    /**
-     * Fires the first quartile event (25% progress).
-     */
-    override fun fireFirstQuartile() {
-        CriteoLogger.info("Firing OMID first quartile", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.firstQuartile()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID first quartile error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the midpoint event (50% progress).
-     */
-    override fun fireMidpoint() {
-        CriteoLogger.info("Firing OMID midpoint", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.midpoint()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID midpoint error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the third quartile event (75% progress).
-     */
-    override fun fireThirdQuartile() {
-        CriteoLogger.info("Firing OMID third quartile", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.thirdQuartile()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID third quartile error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the complete event (100% progress).
-     */
-    override fun fireComplete() {
-        CriteoLogger.info("Firing OMID complete", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.complete()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID complete error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the pause event. Should be called when user pauses playback.
-     */
-    override fun firePause() {
-        CriteoLogger.info("Firing OMID pause", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.pause()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID pause error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the resume event. Should be called when user resumes playback.
-     */
-    override fun fireResume() {
-        CriteoLogger.info("Firing OMID resume", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.resume()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID resume error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the volume change event. Should be called when player volume changes.
-     *
-     * @param volume New player volume (0.0 to 1.0)
-     */
-    override fun fireVolumeChange(volume: Float) {
-        CriteoLogger.info("Firing OMID volume change (volume=$volume)", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.volumeChange(volume)
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID volume change error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the buffer start event. Should be called when playback pauses due to buffering.
-     */
-    override fun fireBufferStart() {
-        CriteoLogger.info("Firing OMID buffer start", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.bufferStart()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID buffer start error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the buffer finish event. Should be called when playback resumes after buffering.
-     */
-    override fun fireBufferFinish() {
-        CriteoLogger.info("Firing OMID buffer finish", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.bufferFinish()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID buffer finish error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires the skipped event. Should be called when ad playback is skipped.
-     */
-    override fun fireSkipped() {
-        CriteoLogger.info("Firing OMID skipped", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.skipped()
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID skipped error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    /**
-     * Fires player state change event.
-     *
-     * @param state New player state (NORMAL, FULLSCREEN, etc.)
-     */
-    fun firePlayerStateChange(state: PlayerState) {
-        CriteoLogger.info("Firing OMID player state change: $state", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.playerStateChange(state)
-        } catch (e: Exception) {
-            CriteoLogger.error(
-                "OMID player state change error: ${e.localizedMessage}",
-                Category.OMID
-            )
-        }
-    }
-
-    /**
-     * Fires ad user interaction event (e.g., click).
-     *
-     * @param interactionType Type of interaction
-     */
-    fun fireAdUserInteraction(interactionType: InteractionType) {
-        CriteoLogger.info("Firing OMID ad user interaction: $interactionType", Category.OMID)
-        try {
-            getMediaEventsPublisher()?.adUserInteraction(interactionType)
-        } catch (e: Exception) {
-            CriteoLogger.error("OMID ad user interaction error: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    // MARK: - Friendly Obstructions
-
-    /**
-     * Adds a view as a friendly obstruction for media controls.
-     *
-     * @param element The view to add as an obstruction (e.g., play/pause button)
-     */
-    override fun addMediaControlsObstruction(element: View) {
-        CriteoLogger.debug("Adding media controls obstruction", Category.OMID)
-        try {
-            adSession?.addFriendlyObstruction(
-                element,
-                FriendlyObstructionPurpose.VIDEO_CONTROLS,
-                "Media Controls over video"
-            )
-        } catch (e: Exception) {
-            CriteoLogger.error("Unable to add friendly obstruction: ${e.localizedMessage}", Category.OMID)
-        }
-    }
-
-    // MARK: - Publisher Accessors
-
-    /**
-     * Returns the media events publisher for direct access to media events.
-     *
-     * @return MediaEvents instance or null if session not started
-     */
-    private fun getMediaEventsPublisher(): MediaEvents? {
-        if (mediaEvents == null) {
-            CriteoLogger.warning("MediaEvents not instantiated, session may not be started", Category.OMID)
-        }
-        return mediaEvents
-    }
-
-    /**
-     * Returns the ad events publisher for direct access to ad events.
-     *
-     * @return AdEvents instance or null if session not started
-     */
-    private fun getAdEventsPublisher(): AdEvents? {
-        if (adEvents == null) {
-            CriteoLogger.warning("AdEvents not instantiated, session may not be started", Category.OMID)
-        }
-        return adEvents
-    }
-
-    // MARK: - Private Helpers
-
-    private fun createAdSession() {
         // Ensure OMID has been activated
         if (!Omid.isActive()) {
             CriteoLogger.error("OMID is not active. Call OMIDSessionInteractor.activateOMSDK() first.", Category.OMID)
@@ -374,7 +87,18 @@ class OMIDSessionInteractor(
                 val omidJs = AdSessionUtil.getOmidJs(context)
 
                 // Create verification script resources
-                val verificationScriptResources = createVerificationScriptResources()
+                val verificationScriptResources = try {
+                    listOf(
+                        VerificationScriptResource.createVerificationScriptResourceWithParameters(
+                            vendorKey,
+                            URL(verificationScriptURL),
+                            verificationParameters
+                        )
+                    )
+                } catch (e: Exception) {
+                    CriteoLogger.error("Unable to create verification script resource: ${e.localizedMessage}", Category.OMID)
+                    emptyList()
+                }
 
                 // Create ad session context
                 val adSessionContext = AdSessionContext.createNativeAdSessionContext(
@@ -398,37 +122,245 @@ class OMIDSessionInteractor(
         }
     }
 
-    private fun createVerificationScriptResources(): List<VerificationScriptResource> = try {
-        listOf(
-            VerificationScriptResource.createVerificationScriptResourceWithParameters(
-                vendorKey,
-                URL(verificationScriptURL),
-                verificationParameters
-            )
-        )
-    } catch (e: Exception) {
-        CriteoLogger.error("Unable to create verification script resource: ${e.localizedMessage}", Category.OMID)
-        emptyList()
-    }
+    /**
+     * Starts the OMID session. Must be called before firing any events.
+     * Creates ad events and media events publishers.
+     */
+    override fun startSession() {
+        val session = adSession ?: run {
+            CriteoLogger.error("Cannot start session: AdSession is null", Category.OMID)
+            return
+        }
 
+        CriteoLogger.info("Starting OMID session", Category.OMID)
 
-    private fun createAdEventsPublisher() {
+        // Create AdEvents publisher
         try {
-            adSession?.let { session ->
-                adEvents = AdEvents.createAdEvents(session)
-            }
+            adEvents = AdEvents.createAdEvents(session)
         } catch (e: Exception) {
             CriteoLogger.error("Unable to create AdEvents: ${e.localizedMessage}", Category.OMID)
         }
-    }
 
-    private fun createMediaEventsPublisher() {
+        // Create MediaEvents publisher
         try {
-            adSession?.let { session ->
-                mediaEvents = MediaEvents.createMediaEvents(session)
-            }
+            mediaEvents = MediaEvents.createMediaEvents(session)
         } catch (e: Exception) {
             CriteoLogger.error("Unable to create MediaEvents: ${e.localizedMessage}", Category.OMID)
+        }
+
+        session.start()
+    }
+
+    /**
+     * Stops the OMID session. Call when ad playback completes or is terminated.
+     */
+    override fun stopSession() {
+        CriteoLogger.info("Stopping OMID session", Category.OMID)
+
+        adSession?.finish()
+        adSession = null
+        adEvents = null
+        mediaEvents = null
+    }
+
+    /**
+     * Fires the ad loaded event with default VAST properties for non-skippable media.
+     */
+    override fun fireAdLoaded() {
+        CriteoLogger.info("Firing OMID ad loaded", Category.OMID)
+        try {
+            adEvents?.loaded()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID load error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the impression event. Should be called when the first frame of video plays.
+     */
+    override fun fireImpression() {
+        CriteoLogger.info("Firing OMID impression", Category.OMID)
+        try {
+            adEvents?.impressionOccurred()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID impression error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the start event. Should be called when video playback begins.
+     *
+     * @param durationMs Duration of the ad in milliseconds
+     * @param volume Current player volume (0.0 to 1.0)
+     */
+    override fun fireStart(durationMs: Long, volume: Float) {
+        CriteoLogger.info("Firing OMID start (duration=${durationMs}ms, volume=$volume)", Category.OMID)
+        try {
+            val durationSeconds = durationMs / 1000f // OMID expects duration in seconds as Float
+            mediaEvents?.start(durationSeconds, volume)
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID start error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the first quartile event (25% progress).
+     */
+    override fun fireFirstQuartile() {
+        CriteoLogger.info("Firing OMID first quartile", Category.OMID)
+        try {
+            mediaEvents?.firstQuartile()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID first quartile error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the midpoint event (50% progress).
+     */
+    override fun fireMidpoint() {
+        CriteoLogger.info("Firing OMID midpoint", Category.OMID)
+        try {
+            mediaEvents?.midpoint()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID midpoint error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the third quartile event (75% progress).
+     */
+    override fun fireThirdQuartile() {
+        CriteoLogger.info("Firing OMID third quartile", Category.OMID)
+        try {
+            mediaEvents?.thirdQuartile()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID third quartile error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the complete event (100% progress).
+     */
+    override fun fireComplete() {
+        CriteoLogger.info("Firing OMID complete", Category.OMID)
+        try {
+            mediaEvents?.complete()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID complete error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the pause event. Should be called when user pauses playback.
+     */
+    override fun firePause() {
+        CriteoLogger.info("Firing OMID pause", Category.OMID)
+        try {
+            mediaEvents?.pause()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID pause error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the resume event. Should be called when user resumes playback.
+     */
+    override fun fireResume() {
+        CriteoLogger.info("Firing OMID resume", Category.OMID)
+        try {
+            mediaEvents?.resume()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID resume error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the volume change event. Should be called when player volume changes.
+     *
+     * @param volume New player volume (0.0 to 1.0)
+     */
+    override fun fireVolumeChange(volume: Float) {
+        CriteoLogger.info("Firing OMID volume change (volume=$volume)", Category.OMID)
+        try {
+            mediaEvents?.volumeChange(volume)
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID volume change error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the buffer start event. Should be called when playback pauses due to buffering.
+     */
+    override fun fireBufferStart() {
+        CriteoLogger.info("Firing OMID buffer start", Category.OMID)
+        try {
+            mediaEvents?.bufferStart()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID buffer start error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the buffer finish event. Should be called when playback resumes after buffering.
+     */
+    override fun fireBufferFinish() {
+        CriteoLogger.info("Firing OMID buffer finish", Category.OMID)
+        try {
+            mediaEvents?.bufferFinish()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID buffer finish error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the skipped event. Should be called when ad playback is skipped.
+     */
+    override fun fireSkipped() {
+        CriteoLogger.info("Firing OMID skipped", Category.OMID)
+        try {
+            mediaEvents?.skipped()
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID skipped error: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires the click interaction event. Should be called when user clicks the ad.
+     */
+    override fun fireClickInteraction() {
+        fireAdUserInteraction(InteractionType.CLICK)
+    }
+
+    /**
+     * Adds a view as a friendly obstruction for media controls.
+     *
+     * @param element The view to add as an obstruction (e.g., play/pause button)
+     */
+    override fun addMediaControlsObstruction(element: View) {
+        CriteoLogger.debug("Adding media controls obstruction", Category.OMID)
+        try {
+            adSession?.addFriendlyObstruction(
+                element,
+                FriendlyObstructionPurpose.VIDEO_CONTROLS,
+                "Media Controls over video"
+            )
+        } catch (e: Exception) {
+            CriteoLogger.error("Unable to add friendly obstruction: ${e.localizedMessage}", Category.OMID)
+        }
+    }
+
+    /**
+     * Fires ad user interaction event (e.g., click).
+     *
+     * @param interactionType Type of interaction
+     */
+    private fun fireAdUserInteraction(interactionType: InteractionType) {
+        CriteoLogger.info("Firing OMID ad user interaction: $interactionType", Category.OMID)
+        try {
+            mediaEvents?.adUserInteraction(interactionType)
+        } catch (e: Exception) {
+            CriteoLogger.error("OMID ad user interaction error: ${e.localizedMessage}", Category.OMID)
         }
     }
 
@@ -477,4 +409,3 @@ class OMIDSessionInteractor(
         }
     }
 }
-

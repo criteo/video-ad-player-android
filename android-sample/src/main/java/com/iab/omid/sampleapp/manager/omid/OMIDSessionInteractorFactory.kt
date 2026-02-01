@@ -31,6 +31,7 @@ interface IOMIDSessionInteractor {
     fun fireBufferStart()
     fun fireBufferFinish()
     fun fireSkipped()
+    fun fireClickInteraction()
 
     // Friendly Obstructions
     fun addMediaControlsObstruction(element: View)
@@ -72,7 +73,7 @@ object OMIDSessionInteractorFactory {
      */
     fun activateOMSDK(context: Context): Boolean = try {
         OMIDSessionInteractor.activateOMSDK(context)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         // OMID SDK not available, will use stub
         false
     }

@@ -29,6 +29,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.iab.omid.sampleapp.manager.BeaconManager
+import com.iab.omid.sampleapp.manager.omid.IOMIDSessionInteractor
+import com.iab.omid.sampleapp.manager.omid.OMIDSessionInteractorFactory
 import com.iab.omid.sampleapp.manager.vast.VastAd
 import com.iab.omid.sampleapp.player.tracking.Quartile
 import com.iab.omid.sampleapp.util.CriteoLogger
@@ -183,6 +185,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     private var player: ExoPlayer? = null
     private var beaconManager: BeaconManager? = null
     private var vastAd: VastAd? = null
+    private var omidSessionInteractor: IOMIDSessionInteractor? = null
 
     private var quartileTrackingStarted = false
     private var isClosedCaptionEnabled = false
@@ -283,6 +286,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
 
     fun setVastAd(vastAd: VastAd) {
         this.vastAd = vastAd
+        initializeOmidSession(vastAd)
     }
 
     // PUBLIC PLAYER API
@@ -295,7 +299,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     ) {
         // Release the player and reset state if it was already initialized
         if (player != null) {
-            release()
+            releasePlayer()
         }
 
         // Create the MediaItem to play
@@ -356,30 +360,20 @@ class CriteoVideoPlayer @JvmOverloads constructor(
                 }
             }
 
+        omidSessionInteractor?.fireAdLoaded()
         fireImpressionEvents()
     }
 
     fun release() {
-        player?.removeListener(this)
-        player?.release()
-        player = null
-
-        quartileTrackingStarted = false
-        quartileTrackingScope.cancel()
-
-        _state.update { currentState ->
-            currentState.copy(
-                playbackState = PlaybackState.IDLE,
-                quartile = Quartile.UNKNOWN
-            )
-        }
+        releaseSession()
+        releasePlayer()
     }
 
     fun play(fromUserInteraction: Boolean) {
         player?.play()
 
         if (state.value.quartile != Quartile.UNKNOWN) {
-            // TODO Fire OMID resume event
+            omidSessionInteractor?.fireResume()
 
             // Fire resume beacon only for user interactions
             if (fromUserInteraction) {
@@ -391,7 +385,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     fun pause(fromUserInteraction: Boolean) {
         player?.pause()
 
-        // TODO Fire OMID pause event
+        omidSessionInteractor?.firePause()
 
         // Fire pause beacon only for user interactions
         if (fromUserInteraction) {
@@ -413,7 +407,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
         player?.let {
             it.volume = if (it.volume == PLAYER_MUTE) PLAYER_UNMUTE else PLAYER_MUTE
 
-            // TODO Fire OMID volume change event
+            omidSessionInteractor?.fireVolumeChange(it.volume)
 
             // Fire mute/unmute beacon
             fireBeaconForAction(if (it.volume == PLAYER_MUTE) "mute" else "unmute")
@@ -427,6 +421,55 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     }
 
     // PRIVATE HELPERS
+    private fun initializeOmidSession(ad: VastAd) {
+        // Release any existing session before starting a new one
+        if (omidSessionInteractor != null) {
+            releaseSession()
+        }
+
+        // Get OMID parameters from VAST ad
+        val vendorKey = ad.vendorKey.orEmpty()
+        val verificationScriptUrl = ad.verificationScriptUrl?.toString().orEmpty()
+        val verificationParameters = ad.verificationParameters.orEmpty()
+
+        // Create OMID session interactor and start session
+        omidSessionInteractor = OMIDSessionInteractorFactory.create(
+            context = context.applicationContext,
+            adView = this,
+            vendorKey = vendorKey,
+            verificationScriptURL = verificationScriptUrl,
+            verificationParameters = verificationParameters
+        ).also { interactor ->
+            // Register friendly obstructions
+            interactor.addMediaControlsObstruction(playPauseButton)
+            interactor.addMediaControlsObstruction(muteButton)
+            interactor.addMediaControlsObstruction(closedCaptionButton)
+
+            interactor.startSession()
+        }
+    }
+
+    private fun releaseSession() {
+        omidSessionInteractor?.stopSession()
+        omidSessionInteractor = null
+    }
+
+    private fun releasePlayer() {
+        player?.removeListener(this)
+        player?.release()
+        player = null
+
+        quartileTrackingStarted = false
+        quartileTrackingScope.cancel()
+
+        _state.update { currentState ->
+            currentState.copy(
+                playbackState = PlaybackState.IDLE,
+                quartile = Quartile.UNKNOWN
+            )
+        }
+    }
+
     private fun startQuartileTrackingLoop() {
         quartileTrackingStarted = true
         quartileTrackingScope.launch {
@@ -456,9 +499,8 @@ class CriteoVideoPlayer @JvmOverloads constructor(
         fireQuartileEvent(Quartile.COMPLETE)
     }
 
-    /// Handle video click - fires OMID/beacon events and either opens URL or toggles play/pause
     private fun handleVideoClick() {
-        // TODO fire OMID click event
+        omidSessionInteractor?.fireClickInteraction()
 
         vastAd?.let { ad ->
             if (ad.clickThroughUrl != null) {
@@ -482,7 +524,7 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     }
 
     private fun fireImpressionEvents() {
-        // TODO Fire OMID impression
+        omidSessionInteractor?.fireImpression()
 
         vastAd?.let { ad -> beaconManager?.fireImpressionBeacons(ad = ad) }
 
@@ -490,7 +532,15 @@ class CriteoVideoPlayer @JvmOverloads constructor(
     }
 
     private fun fireQuartileEvent(quartile: Quartile) {
-        // TODO Fire OMID quartile events
+        // Map quartile to OMID call
+        when (quartile) {
+            Quartile.START -> omidSessionInteractor?.fireStart(durationMs, if (state.value.isMuted) PLAYER_MUTE else PLAYER_UNMUTE)
+            Quartile.FIRST -> omidSessionInteractor?.fireFirstQuartile()
+            Quartile.SECOND -> omidSessionInteractor?.fireMidpoint()
+            Quartile.THIRD -> omidSessionInteractor?.fireThirdQuartile()
+            Quartile.COMPLETE -> omidSessionInteractor?.fireComplete()
+            else -> return
+        }
 
         val actionType = when (quartile) {
             Quartile.START -> "start"
