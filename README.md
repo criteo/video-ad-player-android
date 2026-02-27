@@ -7,3 +7,7 @@ The Criteo Video Ad Player for Android is an open-source library that provides a
 ### Integration Guide
 
 For integration guidance please visit our [developer portal](https://developers.criteo.com/retailer-integration/update/docs/video-player-implementation-app-android).
+
+### Known bugs
+
+- **Video resumes after a paused video is switched back into focus** — The video automatically resumes when the user switches back to the tab/app, even though they manually paused it beforehand. The resume beacon is correctly not fired, but the playback behaviour is wrong. _(will be fixed soon)_
