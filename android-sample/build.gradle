@@ -47,10 +47,6 @@ android {
         defaults {
 
         }
-
-        instrumentationTest {
-            buildConfigField("String", "VERIFICATION_URL", "\"https://omsdk-demo-files.s3.us-west-2.amazonaws.com/fullstack/fullstack-verification-script.js\"")
-        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
@@ -93,15 +89,3 @@ dependencies {
 tasks.withType(JavaCompile) {
     options.compilerArgs << "-Xlint:deprecation"
 }
-
-task downloadOMSDKJS(type:Exec) {
-    if (!file('./src/main/res/raw/omsdk_v1.js').exists()) {
-        workingDir '../'
-        commandLine 'sh', './scripts/download-omsdk-js.sh'
-    } else {
-        // We need a dummy execCommand here.
-        commandLine 'sh'
-    }
-}
-
-//preBuild.dependsOn downloadOMSDKJS
