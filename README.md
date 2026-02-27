@@ -6,7 +6,7 @@ The Criteo Video Ad Player for Android is an open-source library that provides a
 
 ### Integration Guide
 
-For integration guidance please visit our [developer portal](https://developers.criteo.com/retailer-integration/update/docs/video-player-implementation-app-android).
+For integration guidance please visit our [developer portal](https://developers.criteo.com/retailer-integration/docs/video-player-implementation-app-android).
 
 ### Known bugs
 
