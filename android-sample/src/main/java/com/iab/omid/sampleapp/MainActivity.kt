@@ -53,6 +53,15 @@ class MainActivity : AppCompatActivity() {
         navigateToFragment(fragment)
     }
 
+    fun showComposeFeedVideoPlayerScreen(vastUrl: String) {
+        val fragment = ComposeFeedVideoPlayerFragment().apply {
+            arguments = Bundle().apply {
+                putString("vast_url", vastUrl)
+            }
+        }
+        navigateToFragment(fragment)
+    }
+
     private fun navigateToFragment(fragment: Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.mainFragmentContainer, fragment)
