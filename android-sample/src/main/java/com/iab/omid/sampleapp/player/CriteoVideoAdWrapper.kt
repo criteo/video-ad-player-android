@@ -33,6 +33,8 @@ import java.net.URL
 import androidx.core.net.toUri
 import androidx.core.graphics.toColorInt
 import com.iab.omid.sampleapp.player.CriteoVideoAdError.InvalidURL
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 
 /**
@@ -252,6 +254,12 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
     private var lastPlaybackPosition: Long = 0L
     private var isUserPaused: Boolean = false
 
+    /**
+     * Latest play/pause intent from [play]/[pause]. Lets a play() issued before the player
+     * is ready (e.g. while still downloading) take effect once loading completes.
+     */
+    private var playRequested: Boolean = false
+
     private var preloadJob: Job? = null
 
     init {
@@ -330,19 +338,21 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
     }
 
     fun play() {
+        playRequested = true
         videoPlayer?.let { player ->
             isUserPaused = false
+            // onVideoStarted is emitted by the player state observer on the actual transition.
             player.play(fromUserInteraction = false)
-            onVideoStarted?.invoke()
         }
     }
 
     fun pause() {
+        playRequested = false
         videoPlayer?.let { player ->
             isUserPaused = true
             lastPlaybackPosition = player.currentPositionMs
+            // onVideoPaused is emitted by the player state observer on the actual transition.
             player.pause(fromUserInteraction = false)
-            onVideoPaused?.invoke()
         }
     }
 
@@ -524,16 +534,22 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
         player.setVastAd(ad)
 
         // Set up state observation
+        // Only react to playback state transitions: the state flow also emits for quartile
+        // and mute changes, which must not re-trigger started/paused callbacks.
         scope.launch {
-            player.state.collect { state ->
-                when (state.playbackState) {
+            var previous: CriteoVideoPlayer.PlaybackState? = null
+            player.state.map { it.playbackState }.distinctUntilChanged().collect { playbackState ->
+                val last = previous
+                previous = playbackState
+                when (playbackState) {
                     CriteoVideoPlayer.PlaybackState.PLAYING -> {
-                        if (!isUserPaused) {
-                            onVideoStarted?.invoke()
-                        }
+                        onVideoStarted?.invoke()
                     }
                     CriteoVideoPlayer.PlaybackState.PAUSED -> {
-                        onVideoPaused?.invoke()
+                        // Skip the initial "ready but never played" state
+                        if (last == CriteoVideoPlayer.PlaybackState.PLAYING) {
+                            onVideoPaused?.invoke()
+                        }
                     }
                     CriteoVideoPlayer.PlaybackState.ERROR -> {
                         val error = CriteoVideoAdError.PlayerError("Playback error")
@@ -541,7 +557,7 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
                         onVideoError?.invoke(error)
                     }
                     else -> {
-                        wrapperLog("state changed: ${state.playbackState}", Category.VIDEO)
+                        wrapperLog("state changed: $playbackState", Category.VIDEO)
                     }
                 }
             }
@@ -567,7 +583,7 @@ class CriteoVideoAdWrapper @JvmOverloads constructor(
         player.load(
             videoUri = videoUri,
             subtitleUri = subtitleUri,
-            playWhenReady = configuration.autoLoad && !isUserPaused,
+            playWhenReady = (configuration.autoLoad && !isUserPaused) || playRequested,
             startsMuted = configuration.startsMuted
         )
 

@@ -1,6 +1,9 @@
 package com.iab.omid.sampleapp
 
 import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
@@ -17,14 +21,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.iab.omid.sampleapp.player.CriteoVideoAd
 import com.iab.omid.sampleapp.player.CriteoVideoAdConfiguration
 import com.iab.omid.sampleapp.player.CriteoVideoAdLogCategory
+import com.iab.omid.sampleapp.player.CriteoVideoAdState
 import com.iab.omid.sampleapp.player.CriteoVideoAdWrapper
 
 private const val TAG = "ComposeFeedScreen"
@@ -62,9 +67,18 @@ fun ComposeFeedScreen(
     val listState = rememberLazyListState()
     val items = remember { buildFeedItems(vastUrl) }
 
-    // Track whether the video ad item is ≥ 50 % visible.
-    var videoVisiblePercent by remember { mutableStateOf(0f) }
-    val isVideoVisible = isActive && videoVisiblePercent >= 50f
+    // Index of the video ad item in the feed.
+    val videoIndex = remember(items) { items.indexOfFirst { it is FeedItem.VideoAd } }
+
+    // Visibility of the video item relative to the LazyColumn viewport (not the window), so
+    // partially obscured items at either edge are measured correctly. Derived from the list
+    // layout so it is recomputed on scroll and when the item is composed/disposed.
+    // Only the ≥ 50 % flag is exposed to avoid recomposing on every scrolled pixel.
+    val isVideoInViewport by remember(listState, videoIndex) {
+        derivedStateOf {
+            calculateVisiblePercent(listState, videoIndex) >= VISIBILITY_THRESHOLD_PERCENT
+        }
+    }
 
     // Create the wrapper at *screen* scope so it survives LazyColumn item disposal.
     // The player is only released when the screen itself leaves composition
@@ -89,6 +103,29 @@ fun ComposeFeedScreen(
         onDispose { videoWrapper.release() }
     }
 
+    // Remember a manual pause across app/lifecycle transitions: if the ad was visible but not
+    // playing when the screen went to the background, don't auto-resume when coming back.
+    // Captured in ON_PAUSE, i.e. before `isActive` flips and the programmatic pause happens.
+    // Cleared once the ad leaves the viewport, so scrolling back to it autoplays again.
+    var suppressAutoResume by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, videoWrapper) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                suppressAutoResume = isVideoInViewport &&
+                    videoWrapper.state is CriteoVideoAdState.Ready &&
+                    !videoWrapper.isPlaying
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(isVideoInViewport) {
+        if (!isVideoInViewport) suppressAutoResume = false
+    }
+
+    val isVideoVisible = isActive && isVideoInViewport && !suppressAutoResume
+
     LazyColumn(
         state = listState,
         modifier = Modifier
@@ -101,11 +138,41 @@ fun ComposeFeedScreen(
                 is FeedItem.VideoAd -> VideoAdCard(
                     wrapper = videoWrapper,
                     isVisible = isVideoVisible,
-                    onVisibilityChanged = { percent -> videoVisiblePercent = percent }
                 )
             }
         }
     }
+}
+
+// ── Visibility ─────────────────────────────────────────────────────
+
+private const val VISIBILITY_THRESHOLD_PERCENT = 50f
+
+/**
+ * Percentage (0–100) of the item at [index] that is inside the list viewport, or 0 if the
+ * item is not currently laid out.
+ */
+private fun calculateVisiblePercent(listState: LazyListState, index: Int): Float {
+    val layoutInfo = listState.layoutInfo
+    val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return 0f
+    return calculateVisiblePercent(
+        itemStart = item.offset,
+        itemEnd = item.offset + item.size,
+        viewportStart = layoutInfo.viewportStartOffset,
+        viewportEnd = layoutInfo.viewportEndOffset,
+    )
+}
+
+internal fun calculateVisiblePercent(
+    itemStart: Int,
+    itemEnd: Int,
+    viewportStart: Int,
+    viewportEnd: Int,
+): Float {
+    val itemSize = itemEnd - itemStart
+    if (itemSize <= 0) return 0f
+    val visible = (minOf(itemEnd, viewportEnd) - maxOf(itemStart, viewportStart)).coerceAtLeast(0)
+    return visible * 100f / itemSize
 }
 
 // ── Content card ───────────────────────────────────────────────────
@@ -142,10 +209,7 @@ private fun ContentCard(item: FeedItem.Content) {
 private fun VideoAdCard(
     wrapper: CriteoVideoAdWrapper,
     isVisible: Boolean,
-    onVisibilityChanged: (Float) -> Unit,
 ) {
-    val rootView = LocalView.current
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -162,28 +226,11 @@ private fun VideoAdCard(
 
         Spacer(Modifier.height(8.dp))
 
-        // Video container — visibility detection happens here
+        // Video container
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.Black)
-                .onGloballyPositioned { coordinates ->
-                    val itemBounds = coordinates.boundsInWindow()
-                    val itemHeight = itemBounds.height
-                    if (itemHeight <= 0f) {
-                        onVisibilityChanged(0f)
-                        return@onGloballyPositioned
-                    }
-
-                    // Window bounds represent the visible viewport
-                    val windowHeight = rootView.height.toFloat()
-                    val visibleTop = itemBounds.top.coerceAtLeast(0f)
-                    val visibleBottom = itemBounds.bottom.coerceAtMost(windowHeight)
-                    val visibleHeight = (visibleBottom - visibleTop).coerceAtLeast(0f)
-
-                    val percent = (visibleHeight / itemHeight) * 100f
-                    onVisibilityChanged(percent)
-                }
         ) {
             CriteoVideoAd(
                 wrapper = wrapper,
