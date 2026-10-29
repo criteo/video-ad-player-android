@@ -59,4 +59,21 @@ class AppSwitchingScenarioTest : ScenarioBase() {
         assertFalse("still unmuted after return", PlayerRobot.isMuted(activity))
         assertTrue("position kept while paused (was $before, paused at $whilePaused)", whilePaused >= before)
     }
+
+    /** PRODUCT-34910: a manual pause must survive leaving the app and coming back. */
+    @Test
+    fun product_34910_manually_paused_video_stays_paused_after_app_switch() {
+        val activity = launchBasic()
+        awaitPlaying(activity)
+        PlayerRobot.tapPlayPause(activity)
+        assertTrue(server.awaitBeacon("pause"))
+        assertTrue(waitUntil(5_000) { !PlayerRobot.isPlaying(activity) })
+
+        backgroundApp()
+        foregroundApp()
+
+        assertTrue("must stay paused after returning", waitUntil(3_000) { PlayerRobot.isPlaying(activity) }.not())
+        assertEquals("no resume beacon", 0, server.count("resume"))
+        assertEquals("only the manual pause beacon", 1, server.count("pause"))
+    }
 }
