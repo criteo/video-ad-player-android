@@ -1,5 +1,6 @@
 package com.iab.omid.sampleapp.scenario
 
+import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -15,11 +16,13 @@ data class MediaSpec(val name: String, val width: Int, val height: Int)
 data class VastSpec(
     val media: List<MediaSpec> = listOf(MediaSpec("video", 640, 360)),
     val clickThrough: String? = null,
+    // Independent of clickThrough: an empty list omits ClickTracking; relative URLs use this server.
+    val clickTrackingUrls: List<String> = listOf("/beacon/${BeaconEvent.CLICK_TRACKING.xmlName}"),
     val captions: Boolean = false,
     val broken: Boolean = false
 )
 
-data class Beacon(val name: String, val atMs: Long)
+data class Beacon(val event: BeaconEvent, val atMs: Long)
 
 /**
  * Local fake ad server: serves a VAST document, the sample video, an optional WebVTT file and records
@@ -55,7 +58,10 @@ class ScenarioServer(var vast: VastSpec = VastSpec()) {
                     path.startsWith("/cc.vtt") ->
                         MockResponse().setBody(Buffer().write(vttBytes)).setHeader("Content-Type", "text/vtt")
                     path.startsWith("/beacon/") -> {
-                        beacons += Beacon(path.removePrefix("/beacon/").substringBefore('?'), System.currentTimeMillis())
+                        val name = path.removePrefix("/beacon/").substringBefore('?')
+                        val event = BeaconEvent.values().firstOrNull { it.xmlName == name }
+                            ?: return MockResponse().setResponseCode(404)
+                        beacons += Beacon(event, SystemClock.elapsedRealtime())
                         MockResponse().setResponseCode(200)
                     }
                     else -> MockResponse().setResponseCode(404)
@@ -67,35 +73,40 @@ class ScenarioServer(var vast: VastSpec = VastSpec()) {
 
     fun shutdown() = server.shutdown()
 
-    fun count(name: String): Int = beacons.count { it.name == name }
+    fun countReceivedBeacon(event: BeaconEvent): Int = beacons.count { it.event == event }
 
-    fun names(): List<String> = beacons.map { it.name }
+    fun names(): List<BeaconEvent> = beacons.map { it.event }
 
-    /** Waits until beacon [name] has been fired at least [times] times. */
-    fun awaitBeacon(name: String, timeoutMs: Long = 20_000, times: Int = 1): Boolean =
-        waitUntil(timeoutMs) { count(name) >= times }
+    /** Waits up to [timeoutMs] for at least [times] requests to the endpoint for [event]. */
+    fun hasReceivedBeacon(event: BeaconEvent, timeoutMs: Long = ScenarioTimeouts.BEACON_MS, times: Int = 1): Boolean =
+        waitUntil(timeoutMs) { countReceivedBeacon(event) >= times }
 
-    /** True if beacon [name] stays unfired for [forMs]. */
-    fun neverFires(name: String, forMs: Long = 2_000): Boolean = !waitUntil(forMs) { count(name) > 0 }
+    /** Observes the full [forMs] window and returns true only if [event] has never arrived. */
+    fun neverFires(event: BeaconEvent, forMs: Long = ScenarioTimeouts.NO_BEACON_MS): Boolean =
+        !waitUntil(forMs) { countReceivedBeacon(event) > 0 }
 
     private fun buildVast(): String {
         val base = server.url("/").toString().trimEnd('/')
-        fun tracking(event: String) = "<Tracking event=\"$event\">$base/beacon/$event</Tracking>"
-        val events = listOf("start", "firstQuartile", "midpoint", "thirdQuartile", "complete", "mute", "unmute", "pause", "resume")
+        fun tracking(event: BeaconEvent) = "<Tracking event=\"${event.xmlName}\">$base/beacon/${event.xmlName}</Tracking>"
+        val events = BeaconEvent.values()
+            .filter { it != BeaconEvent.IMPRESSION && it != BeaconEvent.CLICK_TRACKING }
             .joinToString("\n") { tracking(it) }
-        val clicks = vast.clickThrough?.let {
-            """<VideoClicks>
-                 <ClickThrough id="Criteo"><![CDATA[$it]]></ClickThrough>
-                 <ClickTracking>$base/beacon/clickTracking</ClickTracking>
-               </VideoClicks>"""
+        val clickThrough = vast.clickThrough?.let {
+            """<ClickThrough id="Criteo"><![CDATA[$it]]></ClickThrough>"""
         }.orEmpty()
+        val clickTracking = vast.clickTrackingUrls.joinToString("\n") {
+            """<ClickTracking><![CDATA[${server.url(it)}]]></ClickTracking>"""
+        }
+        val clicks = if (clickThrough.isNotEmpty() || clickTracking.isNotEmpty()) {
+            "<VideoClicks>$clickThrough$clickTracking</VideoClicks>"
+        } else ""
         val media = vast.media.joinToString("\n") {
             """<MediaFile delivery="progressive" type="video/mp4" width="${it.width}" height="${it.height}">$base/media/${it.name}.mp4</MediaFile>"""
         }
         val cc = if (vast.captions) "<ClosedCaptionFiles><ClosedCaptionFile>$base/cc.vtt</ClosedCaptionFile></ClosedCaptionFiles>" else ""
         return """<?xml version="1.0" encoding="UTF-8"?>
             <VAST version="3.0"><Ad id="scenario"><InLine>
-              <Impression>$base/beacon/impression</Impression>
+              <Impression>$base/beacon/${BeaconEvent.IMPRESSION.xmlName}</Impression>
               <Creatives><Creative><Linear>
                 <Duration>00:00:10</Duration>
                 <TrackingEvents>$events</TrackingEvents>
@@ -107,9 +118,9 @@ class ScenarioServer(var vast: VastSpec = VastSpec()) {
     }
 }
 
-fun waitUntil(timeoutMs: Long, pollMs: Long = 100, condition: () -> Boolean): Boolean {
-    val end = System.currentTimeMillis() + timeoutMs
-    while (System.currentTimeMillis() < end) {
+fun waitUntil(timeoutMs: Long, pollMs: Long = ScenarioTimeouts.POLL_INTERVAL_MS, condition: () -> Boolean): Boolean {
+    val end = SystemClock.elapsedRealtime() + timeoutMs
+    while (SystemClock.elapsedRealtime() < end) {
         if (condition()) return true
         Thread.sleep(pollMs)
     }

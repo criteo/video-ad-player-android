@@ -33,12 +33,12 @@ class AppSwitchingScenarioTest : ScenarioBase() {
         awaitPlaying(activity)
 
         backgroundApp()
-        assertTrue("paused in background", waitUntil(10_000) { !PlayerRobot.isPlaying(activity) })
-        assertTrue("no pause beacon for system pause", server.neverFires("pause", 1_500))
+        assertTrue("paused in background", waitUntil(ScenarioTimeouts.STATE_CHANGE_MS) { !PlayerRobot.isPlaying(activity) })
+        assertTrue("no pause beacon for system pause", server.neverFires(BeaconEvent.PAUSE, ScenarioTimeouts.NO_BEACON_MS))
 
         foregroundApp()
-        assertTrue("resumed on return", waitUntil(15_000) { PlayerRobot.isPlaying(activity) })
-        assertEquals("no resume beacon for automatic resume", 0, server.count("resume"))
+        assertTrue("resumed on return", waitUntil(ScenarioTimeouts.APP_SWITCH_MS) { PlayerRobot.isPlaying(activity) })
+        assertEquals("no resume beacon for automatic resume", 0, server.countReceivedBeacon(BeaconEvent.RESUME))
     }
 
     @Test
@@ -46,15 +46,15 @@ class AppSwitchingScenarioTest : ScenarioBase() {
         val activity = launchBasic()
         awaitPlaying(activity)
         PlayerRobot.tapMute(activity)
-        assertTrue(server.awaitBeacon("unmute"))
-        assertFalse(PlayerRobot.isMuted(activity))
+        assertTrue("user unmute must fire an unmute beacon", server.hasReceivedBeacon(BeaconEvent.UNMUTE))
+        assertFalse("video must be unmuted before switching apps", PlayerRobot.isMuted(activity))
         val before = PlayerRobot.positionMs(activity)
 
         backgroundApp()
-        assertTrue(waitUntil(10_000) { !PlayerRobot.isPlaying(activity) })
+        assertTrue("video must be paused", waitUntil(ScenarioTimeouts.STATE_CHANGE_MS) { !PlayerRobot.isPlaying(activity) })
         val whilePaused = PlayerRobot.positionMs(activity)
         foregroundApp()
-        assertTrue(waitUntil(15_000) { PlayerRobot.isPlaying(activity) })
+        assertTrue("video must resume after returning to the app", waitUntil(ScenarioTimeouts.APP_SWITCH_MS) { PlayerRobot.isPlaying(activity) })
 
         assertFalse("still unmuted after return", PlayerRobot.isMuted(activity))
         assertTrue("position kept while paused (was $before, paused at $whilePaused)", whilePaused >= before)
@@ -62,18 +62,18 @@ class AppSwitchingScenarioTest : ScenarioBase() {
 
     /** PRODUCT-34910: a manual pause must survive leaving the app and coming back. */
     @Test
-    fun product_34910_manually_paused_video_stays_paused_after_app_switch() {
+    fun manually_paused_video_stays_paused_after_app_switch() {
         val activity = launchBasic()
         awaitPlaying(activity)
         PlayerRobot.tapPlayPause(activity)
-        assertTrue(server.awaitBeacon("pause"))
-        assertTrue(waitUntil(5_000) { !PlayerRobot.isPlaying(activity) })
+        assertTrue("user pause must fire a pause beacon", server.hasReceivedBeacon(BeaconEvent.PAUSE))
+        assertTrue("video must be paused", waitUntil(ScenarioTimeouts.STATE_CHANGE_MS) { !PlayerRobot.isPlaying(activity) })
 
         backgroundApp()
         foregroundApp()
 
-        assertTrue("must stay paused after returning", waitUntil(3_000) { PlayerRobot.isPlaying(activity) }.not())
-        assertEquals("no resume beacon", 0, server.count("resume"))
-        assertEquals("only the manual pause beacon", 1, server.count("pause"))
+        assertTrue("must stay paused after returning", waitUntil(ScenarioTimeouts.OBSERVATION_MS) { PlayerRobot.isPlaying(activity) }.not())
+        assertEquals("no resume beacon", 0, server.countReceivedBeacon(BeaconEvent.RESUME))
+        assertEquals("only the manual pause beacon", 1, server.countReceivedBeacon(BeaconEvent.PAUSE))
     }
 }

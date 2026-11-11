@@ -15,13 +15,13 @@ class QuartileScenarioTest : ScenarioBase() {
         val activity = launchBasic()
         awaitPlaying(activity)
 
-        assertTrue("complete; beacons=${server.names()}", server.awaitBeacon("complete", timeoutMs = 120_000))
+        assertTrue("complete; beacons=${server.names()}", server.hasReceivedBeacon(BeaconEvent.COMPLETE, timeoutMs = ScenarioTimeouts.VIDEO_COMPLETE_MS))
 
-        val order = server.names().filter { it in listOf("start", "firstQuartile", "midpoint", "thirdQuartile", "complete") }
-        assertEquals(listOf("start", "firstQuartile", "midpoint", "thirdQuartile", "complete"), order)
+        val order = server.names().filter { it in listOf(BeaconEvent.START, BeaconEvent.FIRST_QUARTILE, BeaconEvent.MIDPOINT, BeaconEvent.THIRD_QUARTILE, BeaconEvent.COMPLETE) }
+        assertEquals("quartile beacons must arrive exactly once in playback order", listOf(BeaconEvent.START, BeaconEvent.FIRST_QUARTILE, BeaconEvent.MIDPOINT, BeaconEvent.THIRD_QUARTILE, BeaconEvent.COMPLETE), order)
 
         // Repeat indefinitely: still playing after reaching the end.
-        assertTrue("keeps playing after complete", waitUntil(10_000) { PlayerRobot.isPlaying(activity) })
-        assertEquals("impression fired once", 1, server.count("impression"))
+        assertTrue("keeps playing after complete", waitUntil(ScenarioTimeouts.STATE_CHANGE_MS) { PlayerRobot.isPlaying(activity) })
+        assertEquals("impression fired once", 1, server.countReceivedBeacon(BeaconEvent.IMPRESSION))
     }
 }

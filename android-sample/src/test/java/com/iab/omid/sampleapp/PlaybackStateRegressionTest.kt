@@ -17,7 +17,7 @@ import org.robolectric.android.controller.ActivityController
  * background and comes back. A video that was playing must still auto-resume.
  */
 @RunWith(RobolectricTestRunner::class)
-class Product34910RegressionTest {
+class PlaybackStateRegressionTest {
 
     private lateinit var controller: ActivityController<MainActivity>
     private lateinit var activity: MainActivity

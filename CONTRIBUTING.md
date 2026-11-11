@@ -75,30 +75,30 @@ Single scenario test class (comma-separate several classes):
 sh ./gradlew connectedDefaultsDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.iab.omid.sampleapp.scenario.BasicPlayerScenarioTest
 ```
 
-A single scenario method: append `#methodName` to the class, for example `...scenario.AppSwitchingScenarioTest#product_34910_manually_paused_video_stays_paused_after_app_switch`.
+A single scenario method: append `#methodName` to the class, for example `...scenario.AppSwitchingScenarioTest#manually_paused_video_stays_paused_after_app_switch`.
 
 Android Studio can also run any test file or method with the green gutter icon.
 
 ### Regression tests
 
-Regression tests are named after the ticket they protect. Currently:
+Name regression tests after the behaviour they protect; keep ticket references in comments for context. Currently:
 
 | Ticket | Behaviour protected | Tests |
 |---|---|---|
-| PRODUCT-34910 | A video paused manually must stay paused after the app goes to the background and returns. A playing video must still auto-resume. | `Product34910RegressionTest` (unit) and `AppSwitchingScenarioTest.product_34910_manually_paused_video_stays_paused_after_app_switch` (scenario) |
+| PRODUCT-34910 | A video paused manually must stay paused after the app goes to the background and returns. A playing video must still auto-resume. | `PlaybackStateRegressionTest` (unit) and `AppSwitchingScenarioTest.manually_paused_video_stays_paused_after_app_switch` (scenario) |
 
 ```bash
-sh ./gradlew testDefaultsDebugUnitTest --tests '*Product34910RegressionTest'
+sh ./gradlew testDefaultsDebugUnitTest --tests '*PlaybackStateRegressionTest'
 ```
 
-When you fix a bug, add a test that fails without your fix and name it after the ticket.
+When you fix a bug, add a test that fails without your fix. Use a descriptive behaviour name and include the ticket in a comment.
 
 ## What the scenario tests cover
 
 | Class | Behaviour |
 |---|---|
-| `BasicPlayerScenarioTest` | Muted autoplay, `impression`/`start` beacons, no `mute` beacon at launch, mute/unmute, pause/resume buttons, tapping the video when there is no redirect link |
-| `ClickThroughScenarioTest` | Redirect link opens the landing page and fires `clickTracking` on every tap, never `pause`; no link means no page opens |
+| `BasicPlayerScenarioTest` | Muted autoplay, `impression`/`start` beacons, no `mute` beacon at launch, mute/unmute, pause/resume buttons, tapping the video when there is no click-through URL |
+| `ClickThroughScenarioTest` | Click-through URL opens the landing page and fires `clickTracking` on every tap, never `pause`; no link means no page opens |
 | `QuartileScenarioTest` | `start`, `firstQuartile`, `midpoint`, `thirdQuartile`, `complete` fire once each, in order, and the video keeps looping |
 | `ClosedCaptionAndMediaScenarioTest` | CC button shown and enabled only when a caption file exists; media file selection by aspect ratio |
 | `AppSwitchingScenarioTest` | Pause on background and resume on return without extra beacons, mute state and position preserved, PRODUCT-34910 |
@@ -108,10 +108,11 @@ When you fix a bug, add a test that fails without your fix and name it after the
 
 Five tests in `FeedViewportScenarioTest` are marked `@Ignore`, each with the reason in the annotation:
 
-- Four depend on a known issue: the video does not autoplay when loading finishes while the ad is already at least 50% visible, so no `start` beacon fires until the ad is scrolled out and back.
-- One covers the "load at page load, even off-screen" rule. The Feed screen only creates the player when the ad row is first bound.
+- Three are blocked by a **known bug in initial autoplay**: `onVisibilityChanged(true)` can call `play()` before `videoPlayer` exists. The wrapper then loads with `autoLoad = false`, and the holder's visibility flag prevents another play attempt while the ad stays visible. These tests cover initial autoplay and the two pause/resume flows that depend on it.
+- One is **test under implementation**: the diagnostic that waits for loading, scrolls away and returns. Its earlier failure has not been isolated to app code; verify player readiness and RecyclerView visibility transitions before attributing it to a bug.
+- One covers a **known bug in off-screen preloading**: the Feed screen only creates the player when the ad row is first bound, so it does not fetch an off-screen ad at page load.
 
-When the underlying bug is fixed, remove the `@Ignore` line so the test starts guarding it.
+The annotations distinguish confirmed app bugs from unfinished test diagnostics. Re-enable each test once its particular cause is addressed; fixing initial autoplay alone does not resolve every skipped test.
 
 ### Not covered
 
@@ -129,16 +130,17 @@ class MyScenarioTest : ScenarioBase() {
         val activity = launchBasic(VastSpec(clickThrough = "https://example.com/landing"))
         awaitPlaying(activity)              // waits for playback and the `start` beacon
         PlayerRobot.tapMute(activity)
-        assertTrue(server.awaitBeacon("unmute"))
+        assertTrue("user unmute must fire a beacon", server.hasReceivedBeacon(BeaconEvent.UNMUTE))
     }
 }
 ```
 
-- `VastSpec` controls the fake VAST: media renditions, click-through URL, captions, or a broken response.
-- `server.awaitBeacon(name)` waits for a beacon; `server.neverFires(name)` asserts it stays unfired; `server.count(name)` and `server.names()` inspect what arrived.
-- `PlayerRobot` finds the player views and taps play/pause, mute, or the video surface like a user.
-- Always call `awaitPlaying` before interacting. The player only fires resume beacons once playback has passed the first quartile, so tapping earlier makes tests flaky.
-- Prefer waiting on a condition (`waitUntil`, `awaitBeacon`) over fixed sleeps.
+- `VastSpec` controls the fake VAST: media renditions, click-through URL, click-tracking URLs, captions, or a broken response. `clickThrough` and `clickTrackingUrls` are independent: use `clickTrackingUrls = emptyList()` to omit tracking, or configure tracking without a click-through URL to check that it stays unfired. Relative tracking URLs resolve against the local server.
+- Pass a `BeaconEvent` enum value to `server.hasReceivedBeacon(event)` to wait for a beacon, `server.neverFires(event)` to observe its absence, or `server.countReceivedBeacon(event)` to count requests. `server.names()` returns the received events in order. `ScenarioTimeouts` defines shared deadlines and observation windows.
+- `PlayerRobot` finds the player views, taps play/pause, mute, or the video surface, reads caption state on the main thread, and scrolls the Feed with `scrollFeedTo(position)`. Put shared UI actions here and shared test assertions in `ScenarioBase`.
+- Always call `awaitPlaying` before interacting. This waits for playback and the `start` beacon (at 1% progress); interacting before that point can change which beacon is emitted.
+- Give assertions a message describing the expected behaviour.
+- Prefer waiting on a condition (`waitUntil`, `hasReceivedBeacon`) over fixed sleeps.
 
 ## Writing unit tests
 

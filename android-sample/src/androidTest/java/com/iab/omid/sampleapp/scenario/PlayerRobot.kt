@@ -1,16 +1,22 @@
 package com.iab.omid.sampleapp.scenario
 
+import android.os.Looper
 import android.app.Activity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageButton
+import androidx.recyclerview.widget.RecyclerView
+import androidx.test.espresso.contrib.RecyclerViewActions.scrollToPosition
+import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.media3.ui.PlayerView
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import androidx.test.platform.app.InstrumentationRegistry
+import com.iab.omid.sampleapp.R
+import com.iab.omid.sampleapp.player.CriteoVideoAdState
 import com.iab.omid.sampleapp.player.CriteoVideoAdWrapper
 import com.iab.omid.sampleapp.player.CriteoVideoPlayer
 
@@ -24,6 +30,7 @@ object PlayerRobot {
     }
 
     private fun <T> onMain(block: () -> T): T {
+        if (Looper.myLooper() == Looper.getMainLooper()) return block()
         var result: Result<T>? = null
         InstrumentationRegistry.getInstrumentation().runOnMainSync { result = runCatching(block) }
         return result!!.getOrThrow()
@@ -51,6 +58,15 @@ object PlayerRobot {
             mute = imageButtons[1],
             cc = find(player, Button::class.java).first { it.parent === player && it.text == "CC" }
         )
+    }
+
+    fun isReady(activity: Activity): Boolean = onMain { wrapperOnMain(activity)?.state is CriteoVideoAdState.Ready }
+    fun ccVisibility(activity: Activity): Int = onMain { controls(activity).cc.visibility }
+    fun ccSelected(activity: Activity): Boolean = onMain { controls(activity).cc.isSelected }
+
+    fun scrollFeedTo(position: Int) {
+        onView(withId(R.id.feedRecyclerView)).perform(scrollToPosition<RecyclerView.ViewHolder>(position))
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
     }
 
     class Controls(val playPause: View, val mute: View, val cc: View)

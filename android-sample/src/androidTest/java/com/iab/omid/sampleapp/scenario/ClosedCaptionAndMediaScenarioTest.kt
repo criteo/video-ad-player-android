@@ -11,17 +11,13 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class ClosedCaptionAndMediaScenarioTest : ScenarioBase() {
 
-    private fun ccVisibility(activity: android.app.Activity): Int = PlayerRobot.controls(activity).cc.visibility
-
-    private fun ccSelected(activity: android.app.Activity): Boolean = PlayerRobot.controls(activity).cc.isSelected
-
     @Test
     fun with_caption_file_cc_button_is_shown_enabled_and_file_is_downloaded() {
         val activity = launchBasic(VastSpec(captions = true))
         awaitPlaying(activity)
 
-        assertEquals("CC visible", View.VISIBLE, ccVisibility(activity))
-        assertTrue("CC enabled at launch", ccSelected(activity))
+        assertEquals("CC visible", View.VISIBLE, PlayerRobot.ccVisibility(activity))
+        assertTrue("CC enabled at launch", PlayerRobot.ccSelected(activity))
     }
 
     @Test
@@ -29,7 +25,7 @@ class ClosedCaptionAndMediaScenarioTest : ScenarioBase() {
         val activity = launchBasic(VastSpec(captions = false))
         awaitPlaying(activity)
 
-        assertEquals("CC hidden", View.GONE, ccVisibility(activity))
+        assertEquals("CC hidden", View.GONE, PlayerRobot.ccVisibility(activity))
     }
 
     @Test
@@ -37,7 +33,7 @@ class ClosedCaptionAndMediaScenarioTest : ScenarioBase() {
         val activity = launchBasic(VastSpec(media = listOf(MediaSpec("only", 640, 360))))
         awaitPlaying(activity)
 
-        assertEquals(listOf("/media/only.mp4"), server.mediaRequests.toList())
+        assertEquals("the sole media rendition must be downloaded", listOf("/media/only.mp4"), server.mediaRequests.toList())
     }
 
     @Test
@@ -54,7 +50,9 @@ class ClosedCaptionAndMediaScenarioTest : ScenarioBase() {
         awaitPlaying(activity)
 
         assertEquals("exactly one rendition is fetched", 1, server.mediaRequests.size)
-        assertEquals("/media/landscape.mp4", server.mediaRequests.first())
+        // Basic's placement uses 16:9. Landscape (640/360) is an exact match;
+        // square (1:1) and portrait (9:16) are farther from its target ratio.
+        assertEquals("16:9 landscape must be selected for the Basic placement", "/media/landscape.mp4", server.mediaRequests.first())
     }
 
     @Test
@@ -64,6 +62,8 @@ class ClosedCaptionAndMediaScenarioTest : ScenarioBase() {
         )
         awaitPlaying(activity)
 
-        assertEquals(listOf("/media/square.mp4"), server.mediaRequests.toList())
+        // For target 16:9 (~1.778), square (1.0) differs by ~0.778,
+        // while portrait (0.5625) differs by ~1.215, so square is closer.
+        assertEquals("square must be the closest available rendition to 16:9", listOf("/media/square.mp4"), server.mediaRequests.toList())
     }
 }

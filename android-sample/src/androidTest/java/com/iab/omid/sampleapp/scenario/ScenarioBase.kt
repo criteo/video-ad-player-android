@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.iab.omid.sampleapp.MainActivity
 import org.junit.After
 import org.junit.Before
+import org.junit.Assert.assertNotNull
 
 abstract class ScenarioBase {
 
@@ -21,6 +22,11 @@ abstract class ScenarioBase {
     fun tearDown() {
         scenario?.close()
         server.shutdown()
+    }
+
+    protected fun <T : Any> assertNotNullValue(value: T?, message: String): T {
+        assertNotNull(message, value)
+        return value!!
     }
 
     protected fun launchBasic(spec: VastSpec = VastSpec()): Activity = launch(spec) { it.showBasicVideoPlayerScreen(server.vastUrl) }
@@ -41,8 +47,8 @@ abstract class ScenarioBase {
     }
 
     /** Waits until playback is running and the `start` beacon (>=1% played) has fired. */
-    protected fun awaitPlaying(activity: Activity, timeoutMs: Long = 30_000) {
+    protected fun awaitPlaying(activity: Activity, timeoutMs: Long = ScenarioTimeouts.PLAYBACK_START_MS) {
         check(waitUntil(timeoutMs) { PlayerRobot.isPlaying(activity) }) { "Video never started playing. Beacons: ${server.names()}" }
-        check(server.awaitBeacon("start", timeoutMs)) { "start beacon never fired. Beacons: ${server.names()}" }
+        check(server.hasReceivedBeacon(BeaconEvent.START, timeoutMs)) { "start beacon never fired. Beacons: ${server.names()}" }
     }
 }
