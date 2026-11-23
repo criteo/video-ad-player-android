@@ -65,7 +65,7 @@ class FeedVideoPlayerFragment : Fragment() {
     }
 
     private fun setupRecyclerView(view: View) {
-        adapter = FeedAdapter()
+        adapter = FeedAdapter().also { it.preloadVideoAds() }
 
         recyclerView = view.findViewById(R.id.feedRecyclerView)
         recyclerView?.apply {
@@ -93,16 +93,13 @@ class FeedVideoPlayerFragment : Fragment() {
      * Checks visibility of the video ad item and plays/pauses based on 50% visibility threshold.
      */
     private fun checkVideoVisibility() {
-        val layoutManager = recyclerView?.layoutManager as? LinearLayoutManager ?: return
-        val firstVisible = layoutManager.findFirstVisibleItemPosition()
-        val lastVisible = layoutManager.findLastVisibleItemPosition()
-
-        for (i in firstVisible..lastVisible) {
-            val viewHolder = recyclerView?.findViewHolderForAdapterPosition(i) ?: continue
-            if (viewHolder is FeedAdapter.VideoAdViewHolder) {
-                val visibilityPercentage = calculateVisibilityPercentage(viewHolder.itemView)
-                viewHolder.onVisibilityChanged(visibilityPercentage >= 50)
-            }
+        // Check every video holder, not only the on-screen ones: a holder that has scrolled out of
+        // the viewport must be reported as not visible, otherwise its visibility flag stays true
+        // and playback never resumes when the ad scrolls back into view.
+        adapter?.videoHolders()?.forEach { holder ->
+            val visibilityPercentage =
+                if (holder.itemView.isAttachedToWindow) calculateVisibilityPercentage(holder.itemView) else 0
+            holder.onVisibilityChanged(visibilityPercentage >= 50)
         }
     }
 
@@ -263,6 +260,36 @@ class FeedVideoPlayerFragment : Fragment() {
 
         override fun getItemCount(): Int = items.size
 
+        /**
+         * Creates (and starts loading) the wrapper for every video ad item up front, so the ad is
+         * fetched at page load even when it is below the fold, not only once its row is bound.
+         */
+        fun preloadVideoAds() {
+            items.filterIsInstance<FeedItem.VideoAd>().forEach { getOrCreateWrapper(it.vastUrl) }
+        }
+
+        private fun getOrCreateWrapper(vastUrl: String): CriteoVideoAdWrapper {
+            videoAdWrappers[vastUrl]?.let {
+                Log.d(TAG, "Reusing existing player for $vastUrl")
+                return it
+            }
+            Log.d(TAG, "Creating new player for $vastUrl")
+
+            return CriteoVideoAdWrapper.fromUrl(
+                context = requireContext(),
+                vastURL = vastUrl,
+                configuration = CriteoVideoAdConfiguration(autoLoad = false, startsMuted = true)
+            ).also { player ->
+                player.enableLogs = setOf(CriteoVideoAdLogCategory.VIDEO, CriteoVideoAdLogCategory.OMID)
+                player.onVideoLoaded = { Log.d(TAG, "Video ad loaded") }
+                player.onVideoStarted = { Log.d(TAG, "Video ad started") }
+                player.onVideoPaused = { Log.d(TAG, "Video ad paused") }
+                videoAdWrappers[vastUrl] = player
+            }
+        }
+
+        fun videoHolders(): List<VideoAdViewHolder> = videoAdViewHolders.toList()
+
         fun pauseAllVideos() {
             videoAdViewHolders.forEach { it.savePlaybackState() }
             videoAdWrappers.values.forEach { it.pause() }
@@ -305,27 +332,7 @@ class FeedVideoPlayerFragment : Fragment() {
                 }
                 currentVastUrl = newUrl
 
-                // Check if we already have a player for this URL in the adapter cache
-                var player = videoAdWrappers[newUrl]
-                if (player == null) {
-                    Log.d(TAG, "Creating new player for $newUrl")
-
-                    player = CriteoVideoAdWrapper.fromUrl(
-                        context = itemView.context,
-                        vastURL = newUrl,
-                        configuration = CriteoVideoAdConfiguration(autoLoad = false, startsMuted = true)
-                    )
-
-                    // Configure listeners
-                    player.enableLogs = setOf(CriteoVideoAdLogCategory.VIDEO, CriteoVideoAdLogCategory.OMID)
-                    player.onVideoLoaded = { Log.d(TAG, "Video ad loaded") }
-                    player.onVideoStarted = { Log.d(TAG, "Video ad started") }
-                    player.onVideoPaused = { Log.d(TAG, "Video ad paused") }
-
-                    videoAdWrappers[newUrl] = player
-                } else {
-                    Log.d(TAG, "Reusing existing player for $newUrl")
-                }
+                val player = getOrCreateWrapper(newUrl)
 
                 videoAdWrapper = player
 
@@ -364,6 +371,9 @@ class FeedVideoPlayerFragment : Fragment() {
 
             fun pause() {
                 videoAdWrapper?.pause()
+                // The holder is being recycled (ad left the viewport). Reset the flag so the
+                // next visibility check sees a change and resumes playback on re-entry.
+                isVideoVisible = false
             }
 
             fun cleanup() {

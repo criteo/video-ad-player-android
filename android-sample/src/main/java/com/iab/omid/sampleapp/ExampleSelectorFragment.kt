@@ -43,6 +43,11 @@ class ExampleSelectorFragment : Fragment() {
             val url = getSelectedVastUrl(view)
             (activity as? MainActivity)?.showFeedVideoPlayerScreen(url)
         }
+
+        view.findViewById<View>(R.id.composeFeedVideoPlayerItem)?.setOnClickListener {
+            val url = getSelectedVastUrl(view)
+            (activity as? MainActivity)?.showComposeFeedVideoPlayerScreen(url)
+        }
     }
 
     private fun getSelectedVastUrl(view: View): String {

@@ -3,7 +3,6 @@ package com.iab.omid.sampleapp.scenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -14,7 +13,6 @@ class FeedViewportScenarioTest : ScenarioBase() {
     private val adPosition = 9
 
     @Test
-    @Ignore("Known bug: FeedAdapter creates the player in bind(), so off-screen ads are not fetched at page load.")
     fun video_is_loaded_at_page_load_even_when_not_in_viewport() {
         launchFeed()
 
@@ -33,7 +31,6 @@ class FeedViewportScenarioTest : ScenarioBase() {
     }
 
     @Test
-    @Ignore("Known bug: onVisibilityChanged(true) can call play() before videoPlayer exists; loading uses autoLoad=false and the visibility flag prevents retry while the ad stays visible.")
     fun scrolling_ad_into_view_autoplays_muted_and_fires_start() {
         val activity = launchFeed()
 
@@ -47,7 +44,6 @@ class FeedViewportScenarioTest : ScenarioBase() {
 
     /** Diagnostic for a separate re-entry path; unlike initial autoplay, its failure is not yet attributed to the app. */
     @Test
-    @Ignore("Test under implementation: verify RecyclerView re-entry and player readiness; the earlier failure after scrolling back has not been isolated to an app bug.")
     fun once_loaded_ad_in_view_autoplays_after_next_visibility_check() {
         val activity = launchFeed()
         PlayerRobot.scrollFeedTo(adPosition)
@@ -62,7 +58,6 @@ class FeedViewportScenarioTest : ScenarioBase() {
     }
 
     @Test
-    @Ignore("Known bug: onVisibilityChanged(true) can call play() before videoPlayer exists; loading uses autoLoad=false and the visibility flag prevents retry while the ad stays visible.")
     fun scrolling_away_pauses_and_back_resumes_without_pause_or_resume_beacons() {
         val activity = launchFeed()
         PlayerRobot.scrollFeedTo(adPosition)
@@ -80,7 +75,6 @@ class FeedViewportScenarioTest : ScenarioBase() {
     }
 
     @Test
-    @Ignore("Known bug: onVisibilityChanged(true) can call play() before videoPlayer exists; loading uses autoLoad=false and the visibility flag prevents retry while the ad stays visible.")
     fun manually_paused_video_resumes_after_leaving_and_returning_without_resume_beacon() {
         val activity = launchFeed()
         PlayerRobot.scrollFeedTo(adPosition)
