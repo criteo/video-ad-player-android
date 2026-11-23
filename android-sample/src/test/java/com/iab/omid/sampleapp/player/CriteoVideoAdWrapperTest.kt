@@ -554,27 +554,65 @@ class CriteoVideoAdWrapperTest {
     }
 
     @Test
-    fun `GIVEN player WHEN play THEN delegated and callback invoked`() {
+    fun `GIVEN player WHEN play THEN delegated without direct callback`() {
         val w = create()
         val p = injectMockPlayer(w)
         var started = 0
         w.onVideoStarted = { started++ }
         w.play()
         verify { p.play(false) }
-        assertEquals(1, started)
+        // onVideoStarted is emitted by the player state observer, not by play() itself
+        assertEquals(0, started)
+        assertTrue(w.field<Boolean>("playRequested"))
+        assertFalse(w.field<Boolean>("isUserPaused"))
     }
 
     @Test
-    fun `GIVEN player WHEN pause THEN position saved and callback invoked`() {
+    fun `GIVEN player WHEN pause THEN position saved without direct callback`() {
         val w = create()
         val p = injectMockPlayer(w)
         var paused = 0
         w.onVideoPaused = { paused++ }
         w.pause()
         verify { p.pause(false) }
-        assertEquals(1, paused)
+        // onVideoPaused is emitted by the player state observer, not by pause() itself
+        assertEquals(0, paused)
         assertEquals(777L, w.field<Long>("lastPlaybackPosition"))
         assertTrue(w.field<Boolean>("isUserPaused"))
+        assertFalse(w.field<Boolean>("playRequested"))
+    }
+
+    @Test
+    fun `GIVEN no player WHEN play THEN request is remembered for when player is ready`() {
+        val w = create()
+        w.play()
+        assertTrue(w.field<Boolean>("playRequested"))
+        w.pause()
+        assertFalse(w.field<Boolean>("playRequested"))
+    }
+
+    @Test
+    fun `GIVEN player playing WHEN quartile changes THEN started callback not repeated`() {
+        routes["/video.mp4"] = MockResponse().setBody("video")
+        val w = create()
+        var started = 0
+        w.onVideoStarted = { started++ }
+        w.loadVideoAd(VASTSource.Xml(vast()))
+        awaitUntil { w.field<Any?>("videoPlayer") != null }
+        val player = w.field<CriteoVideoPlayer>("videoPlayer")
+
+        player.onIsPlayingChanged(true)
+        awaitUntil { started >= 1 }
+        @Suppress("UNCHECKED_CAST")
+        val state = CriteoVideoPlayer::class.java.getDeclaredField("_state")
+            .apply { isAccessible = true }
+            .get(player) as MutableStateFlow<CriteoVideoPlayer.PlayerState>
+        state.value = state.value.copy(quartile = com.iab.omid.sampleapp.player.tracking.Quartile.FIRST)
+        state.value = state.value.copy(quartile = com.iab.omid.sampleapp.player.tracking.Quartile.SECOND)
+        Thread.sleep(300)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+
+        assertEquals(1, started)
     }
 
     @Test
